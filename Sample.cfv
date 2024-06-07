@@ -1,0 +1,27 @@
+// This is a comment that can be used anywhere and comments out the entire line
+/*
+	This is a block comment that comments out everything until the */ 
+// sign
+
+[section]
+key = value // (text if a letter is the first character)
+key2 = 3 // number
+key3 = "also text but with spaces"
+"key with spaces" = true // booleans
+float-key = 5.23534 // floats
+
+[nested]
+array = [
+	"this",
+	"is",
+	"an"
+	"array"
+]
+
+object = {
+	this = "is",
+
+	"an" = {
+		object = true
+	}
+}
