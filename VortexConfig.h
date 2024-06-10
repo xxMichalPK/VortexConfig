@@ -54,7 +54,7 @@ extern "C" {
 	typedef struct SCFVKey {
 		char* name;
 		char* value;
-		uint16_t childCount;
+		uint32_t childCount;
 		struct SCFVKey* children;
 	} TCFVKey;
 
@@ -71,6 +71,21 @@ extern "C" {
 	// The parsed data
 	static TCFVSection* m_parsedData = 0;
 	static uint32_t m_sectionCount = 0;
+
+	// Compatibility functions for embedded systems
+	#if (!defined(OS_WINDOWS) && !defined(OS_LINUX)) || defined(CFV_EMBEDDED_FUNCTIONS)
+		inline void cfvinternal_memcpy(void* dst, const void* src, size_t count) {
+			while (count--) {
+				*((char*)dst) = *((char*)src);
+			}
+		}
+	#else
+		#include <string.h>
+
+		inline void cfvinternal_memcpy(void* dst, const void* src, size_t count) {
+			memcpy(dst, src, count);
+		}
+	#endif
 
 	/**
 	 *	@brief Set config buffer.
@@ -177,8 +192,76 @@ extern "C" {
 		return skippedCount;
 	}
 
+	inline size_t cfvinternal_createsection(const char** dataPtr) {
+		if (!dataPtr) return 0;
 
-#include <stdio.h>
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		if (*internalDataPtr != '[') return 0;
+
+		// If we have a [ it means we have to create a new section that we "push" on top
+		// of the previously added section (for that reason section names have to be unique)
+		++internalDataPtr;
+		size_t nameLength = 0;
+		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		while ((*internalDataPtr != ']') && (internalDataPtr < dataEndPtr)) {
+			++internalDataPtr;
+			++nameLength;
+		}
+		if (*internalDataPtr == ']') ++internalDataPtr;
+		size_t skippedCount = internalDataPtr - *dataPtr;
+		*dataPtr = internalDataPtr;
+
+		// We don't allow empty sections -> []
+		if (nameLength <= 0) return skippedCount;
+
+		++m_sectionCount;
+		TCFVSection* newSections = (TCFVSection*)realloc(m_parsedData, m_sectionCount * sizeof(TCFVSection));
+		if (!newSections) {
+			--m_sectionCount;
+			return skippedCount;
+		}
+
+		newSections[m_sectionCount - 1].keyCount = 0;
+		newSections[m_sectionCount - 1].keys = 0;
+		newSections[m_sectionCount - 1].name = (char*)malloc(nameLength + 1);
+		if (!(newSections[m_sectionCount - 1].name)) {
+			--m_sectionCount;
+			return skippedCount;
+		}
+
+		cfvinternal_memcpy((void*)(newSections[m_sectionCount - 1].name), (void*)(internalDataPtr - nameLength - 1), nameLength);
+		newSections[m_sectionCount - 1].name[nameLength] = '\0';
+
+		m_parsedData = newSections;
+
+		return skippedCount;
+	}
+
+	inline size_t cfvinternal_parsearray(const char** dataPtr) {
+		return 0;
+	}
+	inline size_t cfvinternal_parseobject(const char** dataPtr) {
+		return 0;
+	}
+
+	inline size_t cfvinternal_parsekeyvalue(const char** dataPtr) {
+		if (!dataPtr) return 0;
+
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		// TODO:
+		//	- actually parse the key-value pairs
+
+		if (internalDataPtr == *dataPtr) return 0;
+
+		size_t skippedCount = internalDataPtr - *dataPtr;
+		*dataPtr = internalDataPtr;
+		return skippedCount;
+	}
+
 	/**
 	 *	@brief Parse configuration.
 	 * 
@@ -202,12 +285,22 @@ extern "C" {
 		if (!m_parsedData) return 0;
 		m_sectionCount = 1;
 
+		// TODO:
+		//	- Maybe a better error handling?
+		//	- Test for edge cases
 		while (internalDataPtr < dataEndPtr) {
+			// Skip all whitespaces and comments
 			if (cfvinternal_skipwhitespace(&internalDataPtr)) continue;
 			if (cfvinternal_skipcomments(&internalDataPtr)) continue;
 
+			// If there is a section -> [sectionname] -> create a new section
+			// in the parsed data structure and push it to the end
+			if (cfvinternal_createsection(&internalDataPtr)) continue;
 
-
+			// The only thing left to do is to parse the key-value pairs
+			if (cfvinternal_parsekeyvalue(&internalDataPtr)) continue;
+			
+			// If everything returned with 0 (no data was parsed) just break
 			break;
 		}
 
@@ -287,7 +380,7 @@ extern "C" {
 		}
 
 		if (key.childCount) {
-			for (uint16_t i = 0; i < key.childCount; i++) {
+			for (uint32_t i = 0; i < key.childCount; i++) {
 				cfvinternal_clear_key(key.children[i]);
 			}
 			free((void*)(key.children));
@@ -347,11 +440,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif // __cplusplus
-
-// Compatibility functions for embedded systems
-#if (!defined(OS_WINDOWS) && !defined(OS_LINUX)) || defined(CFV_OS_EMBEDDED)
-
-#endif
 
 // C++ wrapper
 #ifdef __cplusplus
