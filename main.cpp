@@ -1,4 +1,6 @@
-﻿#include "VortexConfig.h"
+﻿// #define CFV_BUFFER_ONLY 1
+// #define CFV_EMBEDDED_FUNCTIONS 1
+#include "VortexConfig.h"
 
 // Here we test the library
 int main() {

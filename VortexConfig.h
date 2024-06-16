@@ -75,8 +75,11 @@ extern "C" {
 	// Compatibility functions for embedded systems
 	#if (!defined(OS_WINDOWS) && !defined(OS_LINUX)) || defined(CFV_EMBEDDED_FUNCTIONS)
 		inline void cfvinternal_memcpy(void* dst, const void* src, size_t count) {
+			unsigned char* srcPtr = (unsigned char*)src;
+			unsigned char* dstPtr = (unsigned char*)dst;
+
 			while (count--) {
-				*((char*)dst) = *((char*)src);
+				*(dstPtr++) = *(srcPtr++);
 			}
 		}
 
