@@ -22,28 +22,38 @@ This parser supports a unique configuration format and provides an easy-to-use i
 
 1. **Include the Parser Code**
 
-   Copy the `VortexConfig.h` header into your project
+   Copy the `VortexConfig.h` header from the `include` directory into your project
 
 2. **Include the Header File**
 
 	```c
-		#include "VortexConfig.h"
+	#include "VortexConfig.h"
 	```
 
 3. **Initialize the Parser**
 
 	```c
-		cfv_open("Sample.cfv");
+	cfv_open("Sample.cfv");
 	```
 
 	or
 
 	```c
-		cfv_set_buffer([your_buffer], [size_of_the_buffer_]);
-		cfv_parse();
+	cfv_set_buffer([your_buffer], [size_of_the_buffer_]);
+	cfv_parse();
 	```
 
 4. **Access Parsed Data**
+
+	```c
+	const char* value = cfv_get_string("section", "key");
+
+	// Nested keys
+	const CFV_Node* node = cfv_get_node("section", "key");
+	const char* nestedValue = cfv_get_string_from_node(node, "key");
+
+	// ...
+	```
 
 ### License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

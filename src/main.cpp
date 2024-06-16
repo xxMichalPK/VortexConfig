@@ -11,11 +11,11 @@ int main() {
 	const char* keyValue = cfv_get_string("nested", "object");
 	printf("For key \"object\" the value is: \"%s\"\n\r", keyValue);
 
-	const TCFVKey* parent = cfv_get_node("nested", "object");
+	const CFV_Node* parent = cfv_get_node("nested", "object");
 	const char* nestedValue = cfv_get_string_from_node(parent, "an");
 	printf("For nested key \"this\" in object \"object\" the value is: \"%s\"\n\r", nestedValue);
 
-	const TCFVKey* nestedParent = cfv_get_node_from_node(parent, "an");
+	const CFV_Node* nestedParent = cfv_get_node_from_node(parent, "an");
 	const char* deeplyNestedValue = cfv_get_string_from_node(nestedParent, "object");
 	printf("For deeply nested key \"object\" in object \"an\" in object \"object\" the value is: \"%s\"\n\r", deeplyNestedValue);
 

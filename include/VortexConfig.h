@@ -58,6 +58,8 @@ extern "C" {
 		struct SCFVKey* children;
 	} TCFVKey;
 
+	typedef TCFVKey CFV_Node;
+
 	typedef struct SCFVSection {
 		char* name;
 		uint32_t keyCount;
@@ -744,7 +746,7 @@ extern "C" {
 		return 0;
 	}
 
-	inline const TCFVKey* cfv_get_node(const char* sectionName, const char* keyName) {
+	inline const CFV_Node* cfv_get_node(const char* sectionName, const char* keyName) {
 		TCFVSection* section = cfv_get_section(sectionName);
 
 		for (int i = 0; i < section->keyCount; i++) {
@@ -755,7 +757,7 @@ extern "C" {
 		return 0;
 	}
 
-	inline const TCFVKey* cfv_get_node_from_node(const TCFVKey* parentNode, const char* keyName) {
+	inline const CFV_Node* cfv_get_node_from_node(const CFV_Node* parentNode, const char* keyName) {
 		for (int i = 0; i < parentNode->childCount; i++) {
 			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
 				return &(parentNode->children[i]);
@@ -764,7 +766,7 @@ extern "C" {
 		return 0;
 	}
 
-	inline const char* cfv_get_string_from_node(const TCFVKey* parentNode, const char* keyName) {
+	inline const char* cfv_get_string_from_node(const CFV_Node* parentNode, const char* keyName) {
 		for (int i = 0; i < parentNode->childCount; i++) {
 			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
 				return parentNode->children[i].value;
