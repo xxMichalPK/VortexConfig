@@ -9,7 +9,8 @@ endif()
 project ("VortexConfig")
 
 # Add source to this project's executable.
-add_executable (VortexConfig "main.cpp" "VortexConfig.h")
+add_executable (VortexConfig "src/main.cpp" "include/VortexConfig.h")
+target_include_directories(VortexConfig PRIVATE "include")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET VortexConfig PROPERTY CXX_STANDARD 20)
