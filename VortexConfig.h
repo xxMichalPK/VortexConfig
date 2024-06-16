@@ -214,7 +214,7 @@ extern "C" {
 		*dataPtr = internalDataPtr;
 
 		// We don't allow empty sections -> []
-		if (nameLength <= 0) return skippedCount;
+		if (nameLength == 0) return skippedCount;
 
 		++m_sectionCount;
 		TCFVSection* newSections = (TCFVSection*)realloc(m_parsedData, m_sectionCount * sizeof(TCFVSection));
@@ -245,6 +245,48 @@ extern "C" {
 	inline size_t cfvinternal_parseobject(const char** dataPtr) {
 		return 0;
 	}
+	inline size_t cfvinternal_parsevalue(const char** dataPtr, TCFVKey *keyValuePair) {
+		if (!dataPtr) return 0;
+
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		int valueInQuotes = (*internalDataPtr == '"') ? 1 : 0;
+		if (valueInQuotes) ++internalDataPtr;
+
+		size_t valueLength = 0;
+		const char* valueStart = internalDataPtr;
+		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		while ((internalDataPtr < dataEndPtr)) {
+			if (valueInQuotes && (*internalDataPtr == '"')) {
+				++internalDataPtr;
+				break;
+			}
+			if (!valueInQuotes && CFV_IS_WHITESPACE(*internalDataPtr)) break;
+
+			++internalDataPtr;
+			++valueLength;
+		}
+
+		size_t skippedCount = internalDataPtr - *dataPtr;
+		if (valueLength == 0) {
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+
+		// Allocate memory for the value
+		keyValuePair->value = (char*)malloc(valueLength + 1);
+		if (!(keyValuePair->value)) {
+			keyValuePair->value = 0;
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		cfvinternal_memcpy((void*)(keyValuePair->value), (void*)valueStart, valueLength);
+		keyValuePair->value[valueLength] = '\0';
+
+		*dataPtr = internalDataPtr;
+		return skippedCount;
+	}
 
 	inline size_t cfvinternal_parsekeyvalue(const char** dataPtr) {
 		if (!dataPtr) return 0;
@@ -252,12 +294,76 @@ extern "C" {
 		const char* internalDataPtr = *dataPtr;
 		if (!internalDataPtr) return 0;
 
-		// TODO:
-		//	- actually parse the key-value pairs
+		// We support keys in quotes so we need to account for that.
+		int keyInQuotes = (*internalDataPtr == '"') ? 1 : 0;
+		if (keyInQuotes) ++internalDataPtr;
 
-		if (internalDataPtr == *dataPtr) return 0;
+		size_t keyLength = 0;
+		const char* keyStart = internalDataPtr;
+		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		while ((internalDataPtr < dataEndPtr)) {
+			if (keyInQuotes && (*internalDataPtr == '"')) { 
+				++internalDataPtr;
+				break;
+			}
+			if (!keyInQuotes && (CFV_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == '='))) break;
 
+			++internalDataPtr;
+			++keyLength;
+		}
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
+		if (keyLength == 0) {
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		// If there's no = it's not a valid key-value pair
+		if (*internalDataPtr != '=') {
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		// Add the key to the current section
+		m_parsedData[m_sectionCount - 1].keyCount++;
+		TCFVKey* newKeys = (TCFVKey*)realloc((void*)(m_parsedData[m_sectionCount - 1].keys), m_parsedData[m_sectionCount - 1].keyCount * sizeof(TCFVKey));
+		if (!newKeys) {
+			m_parsedData[m_sectionCount - 1].keyCount--;
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].childCount = 0;
+		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].children = 0;
+		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].value = 0;
+		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name = (char*)malloc(keyLength + 1);
+		if (!(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name)) {
+			m_parsedData[m_sectionCount - 1].keyCount--;
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		cfvinternal_memcpy((void*)(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name), (void*)keyStart, keyLength);
+		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name[keyLength] = '\0';
+
+		m_parsedData[m_sectionCount - 1].keys = newKeys;
+
+		// Skip the equal sign
+		++internalDataPtr;
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		// Check if the value is an array or object
+		if (*internalDataPtr == '{') {
+			cfvinternal_parseobject(&internalDataPtr);
+		}
+		else if (*internalDataPtr == '[') {
+			cfvinternal_parsearray(&internalDataPtr);
+		}
+		else {
+			cfvinternal_parsevalue(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+		}
+
+		skippedCount = internalDataPtr - *dataPtr;
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
