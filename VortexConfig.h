@@ -79,11 +79,42 @@ extern "C" {
 				*((char*)dst) = *((char*)src);
 			}
 		}
+
+		inline size_t cfvinternal_strlen(const char* str) {
+			size_t len = 0;
+			while (*(str++) != '\0') ++len;
+			return len;
+		}
+
+		inline int cfvinternal_strcmp(const char* str1, const char* str2) {
+			if (str1 == str2) return 0;
+			if (str1 == 0 || str2 == 0) return -1;
+			
+			while (*str1 == *str2) {
+				if (*str1 == '\0' || *str2 == '\0') {
+					return 0;
+				}
+				++str1;
+				++str2;
+			}
+
+			return (*str1 - *str2);
+		}
 	#else
 		#include <string.h>
 
 		inline void cfvinternal_memcpy(void* dst, const void* src, size_t count) {
 			memcpy(dst, src, count);
+		}
+
+		inline size_t cfvinternal_strlen(const char* str) {
+			return strlen(str);
+		}
+
+		inline int cfvinternal_strcmp(const char* str1, const char* str2) {
+			if (str1 == str2) return 0;
+			if (str1 == 0 || str2 == 0) return -999999;
+			return strcmp(str1, str2);
 		}
 	#endif
 
@@ -239,10 +270,18 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t cfvinternal_parsearray(const char** dataPtr) {
+	inline size_t cfvinternal_parsearray(const char** dataPtr, TCFVKey* keyValuePair) {
+		keyValuePair->value = (char*)malloc(8 * sizeof(char));
+		if (keyValuePair->value) {
+			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"[array]\0", 8);
+		}
 		return 0;
 	}
-	inline size_t cfvinternal_parseobject(const char** dataPtr) {
+	inline size_t cfvinternal_parseobject(const char** dataPtr, TCFVKey* keyValuePair) {
+		keyValuePair->value = (char*)malloc(9 * sizeof(char));
+		if (keyValuePair->value) {
+			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"{object}\0", 9);
+		}
 		return 0;
 	}
 	inline size_t cfvinternal_parsevalue(const char** dataPtr, TCFVKey *keyValuePair) {
@@ -354,10 +393,10 @@ extern "C" {
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			cfvinternal_parseobject(&internalDataPtr);
+			cfvinternal_parseobject(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			cfvinternal_parsearray(&internalDataPtr);
+			cfvinternal_parsearray(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
 		}
 		else {
 			cfvinternal_parsevalue(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
@@ -541,6 +580,51 @@ extern "C" {
 				m_currentConfigFile = 0;
 			}
 		#endif // CFV_BUFFER_ONLY
+	}
+
+
+
+	/****************************************************/
+	/*					Get functions					*/
+	/****************************************************/
+
+	/**
+	 *	@brief Get section.
+	 *
+	 *	Returns the pointer to the section with the provided name
+	 *
+	 *	@param sectionName - name of the section (NULL for the root section)
+	 *
+	 *	@returns (TCFVSection*) section pointer
+	 */
+	inline TCFVSection* cfv_get_section(const char* sectionName) {
+		for (int i = 0; i < m_sectionCount; i++) {
+			if (cfvinternal_strcmp(sectionName, m_parsedData[i].name) == 0) {
+				return &(m_parsedData[i]);
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 *	@brief Get string value from key.
+	 *
+	 *	Returns the value associated with the given key in the desired section
+	 * 
+	 *	@param sectionName - name of the section (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 * 
+	 *	@returns (const char*) value of the given key
+	 */
+	inline const char* cfv_get_string(const char* sectionName, const char* keyName) {
+		TCFVSection* section = cfv_get_section(sectionName);
+
+		for (int i = 0; i < section->keyCount; i++) {
+			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
+				return section->keys[i].value;
+			}
+		}
+		return 0;
 	}
 
 #ifdef __cplusplus
