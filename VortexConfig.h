@@ -274,18 +274,53 @@ extern "C" {
 	}
 
 	inline size_t cfvinternal_parsearray(const char** dataPtr, TCFVKey* keyValuePair) {
+		if (!dataPtr) return 0;
+
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		if (*internalDataPtr != '[') return 0;
+
 		keyValuePair->value = (char*)malloc(8 * sizeof(char));
 		if (keyValuePair->value) {
 			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"[array]\0", 8);
 		}
 		return 0;
 	}
+
+	// Forward declare the needed function
+	inline size_t cfvinternal_parseobject_keyvalue(const char** dataPtr, TCFVKey* keyValuePair);
 	inline size_t cfvinternal_parseobject(const char** dataPtr, TCFVKey* keyValuePair) {
+		if (!dataPtr) return 0;
+
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		if (*internalDataPtr != '{') return 0;
+		++internalDataPtr;
+
 		keyValuePair->value = (char*)malloc(9 * sizeof(char));
 		if (keyValuePair->value) {
 			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"{object}\0", 9);
 		}
-		return 0;
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != '}')) {
+			// Skip all whitespaces and comments
+			if (cfvinternal_skipwhitespace(&internalDataPtr)) continue;
+			if (cfvinternal_skipcomments(&internalDataPtr)) continue;
+
+			if (cfvinternal_parseobject_keyvalue(&internalDataPtr, keyValuePair)) {
+				cfvinternal_skipwhitespace(&internalDataPtr);
+				if (*internalDataPtr == ',') continue;
+			}
+		}
+
+		size_t skippedCount = internalDataPtr - *dataPtr;
+		*dataPtr = internalDataPtr;
+		return skippedCount;
 	}
 	inline size_t cfvinternal_parsevalue(const char** dataPtr, TCFVKey *keyValuePair) {
 		if (!dataPtr) return 0;
@@ -326,6 +361,85 @@ extern "C" {
 		cfvinternal_memcpy((void*)(keyValuePair->value), (void*)valueStart, valueLength);
 		keyValuePair->value[valueLength] = '\0';
 
+		*dataPtr = internalDataPtr;
+		return skippedCount;
+	}
+
+	inline size_t cfvinternal_parseobject_keyvalue(const char** dataPtr, TCFVKey* keyValuePair) {
+		if (!dataPtr || !keyValuePair) return 0;
+
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		int keyInQuotes = (*internalDataPtr == '"') ? 1 : 0;
+		if (keyInQuotes) ++internalDataPtr;
+
+		size_t keyLength = 0;
+		const char* keyStart = internalDataPtr;
+		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		while ((internalDataPtr < dataEndPtr)) {
+			if (keyInQuotes && (*internalDataPtr == '"')) {
+				++internalDataPtr;
+				break;
+			}
+			if (!keyInQuotes && (CFV_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == '='))) break;
+
+			++internalDataPtr;
+			++keyLength;
+		}
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		// Don't allow empty keys
+		size_t skippedCount = internalDataPtr - *dataPtr;
+		if (keyLength == 0) {
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		// If there's no = it's not a valid key-value pair
+		if (*internalDataPtr != '=') {
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		// Add the key to the parent key
+		keyValuePair->childCount++;
+		TCFVKey* newChildren = (TCFVKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TCFVKey));
+		if (!newChildren) {
+			keyValuePair->childCount--;
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		newChildren[keyValuePair->childCount - 1].childCount = 0;
+		newChildren[keyValuePair->childCount - 1].children = 0;
+		newChildren[keyValuePair->childCount - 1].value = 0;
+		newChildren[keyValuePair->childCount - 1].name = (char*)malloc(keyLength + 1);
+		if (!(newChildren[keyValuePair->childCount - 1].name)) {
+			keyValuePair->childCount--;
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		cfvinternal_memcpy((void*)(newChildren[keyValuePair->childCount - 1].name), (void*)keyStart, keyLength);
+		newChildren[keyValuePair->childCount - 1].name[keyLength] = '\0';
+
+		keyValuePair->children = newChildren;
+
+		// Skip the equal sign
+		++internalDataPtr;
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		// Check if the value is an array or object
+		if (*internalDataPtr == '{') {
+			cfvinternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+		}
+		else if (*internalDataPtr == '[') {
+			cfvinternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+		}
+		else {
+			cfvinternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+		}
+
+		skippedCount = internalDataPtr - *dataPtr;
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
@@ -625,6 +739,35 @@ extern "C" {
 		for (int i = 0; i < section->keyCount; i++) {
 			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
 				return section->keys[i].value;
+			}
+		}
+		return 0;
+	}
+
+	inline const TCFVKey* cfv_get_node(const char* sectionName, const char* keyName) {
+		TCFVSection* section = cfv_get_section(sectionName);
+
+		for (int i = 0; i < section->keyCount; i++) {
+			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
+				return &(section->keys[i]);
+			}
+		}
+		return 0;
+	}
+
+	inline const TCFVKey* cfv_get_node_from_node(const TCFVKey* parentNode, const char* keyName) {
+		for (int i = 0; i < parentNode->childCount; i++) {
+			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
+				return &(parentNode->children[i]);
+			}
+		}
+		return 0;
+	}
+
+	inline const char* cfv_get_string_from_node(const TCFVKey* parentNode, const char* keyName) {
+		for (int i = 0; i < parentNode->childCount; i++) {
+			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
+				return parentNode->children[i].value;
 			}
 		}
 		return 0;
