@@ -57,7 +57,6 @@ extern "C" {
 		uint32_t childCount;
 		struct SCFVKey* children;
 	} TCFVKey;
-
 	typedef TCFVKey CFV_Node;
 
 	typedef struct SCFVSection {
@@ -122,6 +121,33 @@ extern "C" {
 			return strcmp(str1, str2);
 		}
 	#endif
+
+	inline char* cfvinternal_unsignednumtostr(size_t number) {
+		char* result = (char*)malloc(22 * sizeof(char));
+		if (!result) return 0;
+
+		if (number == 0) {
+			result[0] = '0';
+			result[1] = '\0';
+			return result;
+		}
+
+		int pos = 0;
+		while (number > 0) {
+			result[pos++] = (number % 10) + '0';
+			number /= 10;
+		}
+
+		result[pos--] = '\0';
+
+		for (int i = 0; i < pos; i++, pos--) {
+			char tmp = result[pos];
+			result[pos] = result[i];
+			result[i] = tmp;
+		}
+
+		return result;
+	}
 
 	/**
 	 *	@brief Set config buffer.
@@ -275,6 +301,8 @@ extern "C" {
 		return skippedCount;
 	}
 
+	// Forward declare the needed function
+	inline size_t cfvinternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TCFVKey* keyValuePair);
 	inline size_t cfvinternal_parsearray(const char** dataPtr, TCFVKey* keyValuePair) {
 		if (!dataPtr) return 0;
 
@@ -282,12 +310,35 @@ extern "C" {
 		if (!internalDataPtr) return 0;
 
 		if (*internalDataPtr != '[') return 0;
+		++internalDataPtr;
 
 		keyValuePair->value = (char*)malloc(8 * sizeof(char));
 		if (keyValuePair->value) {
 			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"[array]\0", 8);
 		}
-		return 0;
+		
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		size_t arrayIndex = 0;
+		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != ']')) {
+			// Skip all whitespaces and comments
+			if (cfvinternal_skipwhitespace(&internalDataPtr)) continue;
+			if (cfvinternal_skipcomments(&internalDataPtr)) continue;
+
+			if (cfvinternal_parsearray_keyvalue(&internalDataPtr, arrayIndex, keyValuePair)) {
+				cfvinternal_skipwhitespace(&internalDataPtr);
+				if (*internalDataPtr == ',') {
+					++internalDataPtr;
+					++arrayIndex;
+					continue;
+				}
+			}
+		}
+
+		size_t skippedCount = internalDataPtr - *dataPtr;
+		*dataPtr = internalDataPtr;
+		return skippedCount;
 	}
 
 	// Forward declare the needed function
@@ -316,7 +367,10 @@ extern "C" {
 
 			if (cfvinternal_parseobject_keyvalue(&internalDataPtr, keyValuePair)) {
 				cfvinternal_skipwhitespace(&internalDataPtr);
-				if (*internalDataPtr == ',') continue;
+				if (*internalDataPtr == ',') {
+					++internalDataPtr;
+					continue;
+				}
 			}
 		}
 
@@ -363,6 +417,53 @@ extern "C" {
 		cfvinternal_memcpy((void*)(keyValuePair->value), (void*)valueStart, valueLength);
 		keyValuePair->value[valueLength] = '\0';
 
+		*dataPtr = internalDataPtr;
+		return skippedCount;
+	}
+
+	inline size_t cfvinternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TCFVKey* keyValuePair) {
+		if (!dataPtr || !keyValuePair) return 0;
+
+		const char* internalDataPtr = *dataPtr;
+		if (!internalDataPtr) return 0;
+
+		char* keyName = cfvinternal_unsignednumtostr(valueIndex);
+		if (!keyName) return 0;
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		// Don't allow empty keys
+		size_t skippedCount = internalDataPtr - *dataPtr;
+
+		// Add the key to the parent key
+		keyValuePair->childCount++;
+		TCFVKey* newChildren = (TCFVKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TCFVKey));
+		if (!newChildren) {
+			keyValuePair->childCount--;
+			*dataPtr = internalDataPtr;
+			return skippedCount;
+		}
+		newChildren[keyValuePair->childCount - 1].childCount = 0;
+		newChildren[keyValuePair->childCount - 1].children = 0;
+		newChildren[keyValuePair->childCount - 1].value = 0;
+		newChildren[keyValuePair->childCount - 1].name = keyName;
+
+		keyValuePair->children = newChildren;
+
+		cfvinternal_skipwhitespace(&internalDataPtr);
+
+		// Check if the value is an array or object
+		if (*internalDataPtr == '{') {
+			cfvinternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+		}
+		else if (*internalDataPtr == '[') {
+			cfvinternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+		}
+		else {
+			cfvinternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+		}
+
+		skippedCount = internalDataPtr - *dataPtr;
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
@@ -595,8 +696,8 @@ extern "C" {
 		}
 		
 		// Open the desired file
-		m_currentConfigFile = fopen(s_path, "a+b");
-		if (!m_currentConfigFile) {
+		errno_t fileOpenFailed = fopen_s(&m_currentConfigFile, s_path, "a+b");
+		if (fileOpenFailed || !m_currentConfigFile) {
 			perror("Failed to open the specified file\n\r");
 			return 0; // Failure
 		}
@@ -717,7 +818,7 @@ extern "C" {
 	 *	@returns (TCFVSection*) section pointer
 	 */
 	inline TCFVSection* cfv_get_section(const char* sectionName) {
-		for (int i = 0; i < m_sectionCount; i++) {
+		for (uint32_t i = 0; i < m_sectionCount; i++) {
 			if (cfvinternal_strcmp(sectionName, m_parsedData[i].name) == 0) {
 				return &(m_parsedData[i]);
 			}
@@ -738,7 +839,7 @@ extern "C" {
 	inline const char* cfv_get_string(const char* sectionName, const char* keyName) {
 		TCFVSection* section = cfv_get_section(sectionName);
 
-		for (int i = 0; i < section->keyCount; i++) {
+		for (uint32_t i = 0; i < section->keyCount; i++) {
 			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
 				return section->keys[i].value;
 			}
@@ -746,10 +847,20 @@ extern "C" {
 		return 0;
 	}
 
+	/**
+	 *	@brief Get key node.
+	 *
+	 *	Returns the entire node associated with the given key in the desired section
+	 *
+	 *	@param sectionName - name of the section (NULL for the root section)
+	 *	@param keyName - name of the key node
+	 *
+	 *	@returns (const CFV_Node*) entire node of the given key
+	 */
 	inline const CFV_Node* cfv_get_node(const char* sectionName, const char* keyName) {
 		TCFVSection* section = cfv_get_section(sectionName);
 
-		for (int i = 0; i < section->keyCount; i++) {
+		for (uint32_t i = 0; i < section->keyCount; i++) {
 			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
 				return &(section->keys[i]);
 			}
@@ -757,8 +868,21 @@ extern "C" {
 		return 0;
 	}
 
+	/**
+	 *	@brief Get key node from parent node.
+	 *
+	 *	Returns the entire node associated with the given key in the desired parent node
+	 *
+	 *	@param parentNode - node of the element to search in (NULL for the root section)
+	 *	@param keyName - name of the key node
+	 *
+	 *	@returns (const CFV_Node*) entire node of the given key
+	 */
 	inline const CFV_Node* cfv_get_node_from_node(const CFV_Node* parentNode, const char* keyName) {
-		for (int i = 0; i < parentNode->childCount; i++) {
+		// If there's no parent use the root section as parent
+		if (!parentNode) return cfv_get_node(0, keyName);
+
+		for (uint32_t i = 0; i < parentNode->childCount; i++) {
 			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
 				return &(parentNode->children[i]);
 			}
@@ -766,8 +890,21 @@ extern "C" {
 		return 0;
 	}
 
+	/**
+	 *	@brief Get string value from key inside the given node.
+	 *
+	 *	Returns the value associated with the given key in the desired node
+	 *
+	 *	@param parentNode - node of the element to search in (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (const char*) value of the given key
+	 */
 	inline const char* cfv_get_string_from_node(const CFV_Node* parentNode, const char* keyName) {
-		for (int i = 0; i < parentNode->childCount; i++) {
+		// If there's no parent use the root section as parent
+		if (!parentNode) return cfv_get_string(0, keyName);
+
+		for (uint32_t i = 0; i < parentNode->childCount; i++) {
 			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
 				return parentNode->children[i].value;
 			}
