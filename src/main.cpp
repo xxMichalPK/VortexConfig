@@ -29,8 +29,10 @@ int main() {
 	std::cout << "\n\rTesting different value types:\n\r";
 	int intVal = cfv_get_int("first_section", "lines_of_code");
 	double floatVal = cfv_get_float("first_section", "satisfaction_level");
+	bool boolVal = cfv_get_bool(nullptr, "is_root_section");
 	std::cout << "Integer value \"lines_of_code\" is: " << intVal << "\n\r";
 	std::cout << "Floating point value \"satisfaction_level\" is: " << floatVal << "\n\r";
+	std::cout << "Boolean value \"is_root_section\" is: " << boolVal << "\n\r";
 
 	std::cout << "\n\rTesting nested keys (objects and arrays):\n\r";
 	const char* objectValue = cfv_get_string("nested_keys", "an_object");

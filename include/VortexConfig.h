@@ -948,6 +948,21 @@ extern "C" {
 	}
 
 	/**
+	 *	@brief Get boolean value (true|false) from key.
+	 *
+	 *	Returns the value associated with the given key in the desired section
+	 *
+	 *	@param sectionName - name of the section (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (int [1-true; 0-false]) value of the given key
+	 */
+	inline int cfv_get_bool(const char* sectionName, const char* keyName) {
+		const char* stringValue = cfv_get_string(sectionName, keyName);
+		return (cfvinternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
+	}
+
+	/**
 	 *	@brief Get key node.
 	 *
 	 *	Returns the entire node associated with the given key in the desired section
@@ -1046,6 +1061,24 @@ extern "C" {
 
 		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
 		return cfvinternal_strtofloat(stringValue);
+	}
+
+	/**
+	 *	@brief Get boolean value (true|false) from key inside the given node.
+	 *
+	 *	Returns the value associated with the given key in the desired node
+	 *
+	 *	@param parentNode - node of the element to search in (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (int [1-true; 0-false]) value of the given key
+	 */
+	inline int cfv_get_bool_from_node(const CFV_Node* parentNode, const char* keyName) {
+		// If there's no parent use the root section as parent
+		if (!parentNode) return cfv_get_bool(0, keyName);
+
+		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
+		return (cfvinternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
 	}
 
 #ifdef __cplusplus
