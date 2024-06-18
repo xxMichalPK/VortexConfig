@@ -33,25 +33,27 @@ This parser supports a unique configuration format and provides an easy-to-use i
 3. **Initialize the Parser**
 
 	```c
-	cfv_open("Sample.cfv");
+	vcfg_open("Sample.vcfg");
 	```
 
 	or
 
 	```c
-	cfv_set_buffer([your_buffer], [size_of_the_buffer_]);
-	cfv_parse();
+	vcfg_set_buffer([your_buffer], [size_of_the_buffer_]);
+	vcfg_parse();
 	```
 
 4. **Access Parsed Data**
 
 	```c
-	const char* value = cfv_get_string("section", "key");
+	const char* value = vcfg_get_string("section", "key");
+	int intVal = vcfg_get_int("section", "intKey");
+	float floatVal = vcfg_get_float("section", "floatKey");
+	bool boolVal = vcfg_get_bool("section", "boolKey");
 
 	// Nested keys
-	const CFV_Node* node = cfv_get_node("section", "key");
-	const char* nestedValue = cfv_get_string_from_node(node, "key");
-
+	const CFV_Node* node = vcfg_get_node("section", "key");
+	const char* nestedValue = vcfg_get_string_from_node(node, "key");
 	// ...
 	```
 

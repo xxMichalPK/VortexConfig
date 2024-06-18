@@ -38,12 +38,12 @@
 #endif
 
 // Helper macros
-#ifndef CFV_IS_WHITESPACE
-	#define CFV_IS_WHITESPACE(ch) ((ch == ' ') || ((ch >= '\b') && (ch <= '\r')))
+#ifndef VCFG_IS_WHITESPACE
+	#define VCFG_IS_WHITESPACE(ch) ((ch == ' ') || ((ch >= '\b') && (ch <= '\r')))
 #endif
 
-#ifndef CFV_IS_NUMBER
-	#define CFV_IS_NUMBER(ch) ((ch >= '0') && (ch <= '9'))
+#ifndef VCFG_IS_NUMBER
+	#define VCFG_IS_NUMBER(ch) ((ch >= '0') && (ch <= '9'))
 #endif
 
 // All the necessary C code
@@ -55,31 +55,34 @@ extern "C" {
 	// Those can be replaced by a custom implementation in an embedded system
 	#include <stdlib.h>
 
-	typedef struct SCFVKey {
+	typedef struct SVCFGKey {
 		char* name;
 		char* value;
 		uint32_t childCount;
-		struct SCFVKey* children;
-	} TCFVKey;
-	typedef TCFVKey CFV_Node;
+		struct SVCFGKey* children;
+	} TVCFGKey;
+	typedef TVCFGKey VCFG_Node;
 
-	typedef struct SCFVSection {
+	typedef struct SVCFGSection {
 		char* name;
 		uint32_t keyCount;
-		TCFVKey* keys;
-	} TCFVSection;
+		TVCFGKey* keys;
+	} TVCFGSection;
 
 	// The raw data of the configuration (file)
 	static const char* m_configBuffer = 0;
 	static size_t m_configBufferLength = 0;
 
 	// The parsed data
-	static TCFVSection* m_parsedData = 0;
+	static TVCFGSection* m_parsedData = 0;
 	static uint32_t m_sectionCount = 0;
 
 	// Compatibility functions for embedded systems
-	#if (!defined(OS_WINDOWS) && !defined(OS_LINUX)) || defined(CFV_EMBEDDED_FUNCTIONS)
-		inline void cfvinternal_memcpy(void* dst, const void* src, size_t count) {
+	#if (!defined(OS_WINDOWS) && !defined(OS_LINUX)) || defined(VCFG_EMBEDDED_FUNCTIONS)
+		/**
+		 *	@brief C library memcpy implementation
+		 */
+		inline void vcfginternal_memcpy(void* dst, const void* src, size_t count) {
 			unsigned char* srcPtr = (unsigned char*)src;
 			unsigned char* dstPtr = (unsigned char*)dst;
 
@@ -88,13 +91,19 @@ extern "C" {
 			}
 		}
 
-		inline size_t cfvinternal_strlen(const char* str) {
+		/**
+		 *	@brief C library strlen implementation
+		 */
+		inline size_t vcfginternal_strlen(const char* str) {
 			size_t len = 0;
 			while (*(str++) != '\0') ++len;
 			return len;
 		}
 
-		inline int cfvinternal_strcmp(const char* str1, const char* str2) {
+		/**
+		 *	@brief C library strcmp implementation
+		 */
+		inline int vcfginternal_strcmp(const char* str1, const char* str2) {
 			if (str1 == str2) return 0;
 			if (str1 == 0 || str2 == 0) return -1;
 			
@@ -111,22 +120,38 @@ extern "C" {
 	#else
 		#include <string.h>
 
-		inline void cfvinternal_memcpy(void* dst, const void* src, size_t count) {
+		/**
+		 *	@brief C library memcpy implementation
+		 */
+		inline void vcfginternal_memcpy(void* dst, const void* src, size_t count) {
 			memcpy(dst, src, count);
 		}
 
-		inline size_t cfvinternal_strlen(const char* str) {
+		/**
+		 *	@brief C library strlen implementation
+		 */
+		inline size_t vcfginternal_strlen(const char* str) {
 			return strlen(str);
 		}
 
-		inline int cfvinternal_strcmp(const char* str1, const char* str2) {
+		/**
+		 *	@brief C library strcmp implementation
+		 */
+		inline int vcfginternal_strcmp(const char* str1, const char* str2) {
 			if (str1 == str2) return 0;
 			if (str1 == 0 || str2 == 0) return -999999;
 			return strcmp(str1, str2);
 		}
 	#endif
 
-	inline int64_t cfvinternal_strtoint(const char* str) {
+	/**
+	 *	@brief String to integer conversion.
+	 * 
+	 *	@param str - the stringified number
+	 * 
+	 *	@returns (int64_t) the number as an integer
+	 */
+	inline int64_t vcfginternal_strtoint(const char* str) {
 		if (!str) return -1;
 
 		int negative = 0;
@@ -138,10 +163,10 @@ extern "C" {
 		}
 
 		// If the first character is not a number there is no point in running the loop
-		if (!CFV_IS_NUMBER(*str)) return -1;
+		if (!VCFG_IS_NUMBER(*str)) return -1;
 
 		while (*str != '\0') {
-			if (!CFV_IS_NUMBER(*str)) break;
+			if (!VCFG_IS_NUMBER(*str)) break;
 
 			result *= 10;
 			result += (*str) - '0';
@@ -151,7 +176,14 @@ extern "C" {
 		return (negative ? -result : result);
 	}
 
-	inline double cfvinternal_strtofloat(const char* str) {
+	/**
+	 *	@brief String to floating point number conversion.
+	 *
+	 *	@param str - the stringified number
+	 *
+	 *	@returns (double) the number as a floating point number
+	 */
+	inline double vcfginternal_strtofloat(const char* str) {
 		if (!str) return -1;
 
 		int negative = 0;
@@ -163,12 +195,12 @@ extern "C" {
 		}
 
 		// If the first character is not a number, nor a dot, there is no point in running the loop
-		if (!CFV_IS_NUMBER(*str) && *str != '.') return -1;
+		if (!VCFG_IS_NUMBER(*str) && *str != '.') return -1;
 
 		int isDecimalPart = 0;
 		int decimalPlaces = 0;
 		while (*str != '\0') {
-			if (!CFV_IS_NUMBER(*str) && *str != '.') break;
+			if (!VCFG_IS_NUMBER(*str) && *str != '.') break;
 			if (isDecimalPart && *str == '.') break;	// In case there is a second dot
 			if (*str == '.') {
 				isDecimalPart = 1;
@@ -190,7 +222,17 @@ extern "C" {
 		return (negative ? -result : result);
 	}
 
-	inline char* cfvinternal_unsignednumtostr(size_t number) {
+	/**
+	 *	@brief Unsigned number to string conversion.
+	 * 
+	 *	WARNING: this function works only on positive numbers that fit in size_t
+	 *	32bit numbers for 32bit machines and 64bit numbers for 64bit machines!
+	 *
+	 *	@param number - the number to convert
+	 *
+	 *	@returns (char*) the number as a string (null terminated)
+	 */
+	inline char* vcfginternal_unsignednumtostr(size_t number) {
 		char* result = (char*)malloc(22 * sizeof(char));
 		if (!result) return 0;
 
@@ -225,7 +267,7 @@ extern "C" {
 	 *	@param inputBuffer - the desired raw data buffer
 	 *	@param dataLength - length of the input
 	 */
-	inline void cfv_set_buffer(const char* inputBuffer, size_t dataLength) {
+	inline void vcfg_set_buffer(const char* inputBuffer, size_t dataLength) {
 		// If the buffer was already set try to free it
 		if (m_configBuffer) {
 			free((void*)m_configBuffer);
@@ -236,15 +278,23 @@ extern "C" {
 		m_configBufferLength = dataLength;
 	}
 
-
-	inline size_t cfvinternal_skipwhitespace(const char **dataPtr) {
+	/**
+	 *	@brief Skip whitespace.
+	 * 
+	 *	Skips all whitespace characters in a buffer
+	 * 
+	 *	@param dataPtr - pointer to the raw data buffer
+	 * 
+	 *	@returns (size_t) number of bytes skipped
+	 */
+	inline size_t vcfginternal_skipwhitespace(const char **dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
 		if (!internalDataPtr) return 0;
 
 		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
-		while (CFV_IS_WHITESPACE(*internalDataPtr) && (internalDataPtr < dataEndPtr)) {
+		while (VCFG_IS_WHITESPACE(*internalDataPtr) && (internalDataPtr < dataEndPtr)) {
 			++internalDataPtr;
 		}
 
@@ -255,8 +305,16 @@ extern "C" {
 		return skippedCount;
 	}
 
-
-	inline size_t cfvinternal_skiplinecomment(const char** dataPtr) {
+	/**
+	 *	@brief Skip line comment.
+	 *
+	 *	Skips an entire line starting at the comment sign -> //
+	 *
+	 *	@param dataPtr - pointer to the raw data buffer
+	 *
+	 *	@returns (size_t) number of bytes skipped
+	 */
+	inline size_t vcfginternal_skiplinecomment(const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -278,7 +336,17 @@ extern "C" {
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
-	inline size_t cfvinternal_skipblockcomment(const char** dataPtr) {
+
+	/**
+	 *	@brief Skip block comment.
+	 *
+	 *	Skips an entire commented block starting at the comment sign -> /* and ending with "* /"
+	 *
+	 *	@param dataPtr - pointer to the raw data buffer
+	 *
+	 *	@returns (size_t) number of bytes skipped
+	 */
+	inline size_t vcfginternal_skipblockcomment(const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -306,15 +374,24 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t cfvinternal_skipcomments(const char** dataPtr) {
+	/**
+	 *	@brief Skip all comments.
+	 *
+	 *	Skips all types of comments
+	 *
+	 *	@param dataPtr - pointer to the raw data buffer
+	 *
+	 *	@returns (size_t) number of bytes skipped
+	 */
+	inline size_t vcfginternal_skipcomments(const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
 		if (!internalDataPtr) return 0;
 
 		size_t skippedCount = 0;
-		skippedCount += cfvinternal_skiplinecomment(&internalDataPtr);
-		skippedCount += cfvinternal_skipblockcomment(&internalDataPtr);
+		skippedCount += vcfginternal_skiplinecomment(&internalDataPtr);
+		skippedCount += vcfginternal_skipblockcomment(&internalDataPtr);
 
 		if ((internalDataPtr == *dataPtr) || (skippedCount == 0)) return 0;
 
@@ -322,7 +399,17 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t cfvinternal_createsection(const char** dataPtr) {
+	/**
+	 *	@brief Create a new section in the parsed data structure.
+	 *
+	 *	Parses the name of a section in the configuration file and creates a new section
+	 *	structure with the appropriate name, then pushes the section to the end of the parsed data
+	 *
+	 *	@param dataPtr - pointer to the raw data buffer
+	 *
+	 *	@returns (size_t) number of bytes skipped
+	 */
+	inline size_t vcfginternal_createsection(const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -347,7 +434,7 @@ extern "C" {
 		if (nameLength == 0) return skippedCount;
 
 		++m_sectionCount;
-		TCFVSection* newSections = (TCFVSection*)realloc(m_parsedData, m_sectionCount * sizeof(TCFVSection));
+		TVCFGSection* newSections = (TVCFGSection*)realloc(m_parsedData, m_sectionCount * sizeof(TVCFGSection));
 		if (!newSections) {
 			--m_sectionCount;
 			return skippedCount;
@@ -361,7 +448,7 @@ extern "C" {
 			return skippedCount;
 		}
 
-		cfvinternal_memcpy((void*)(newSections[m_sectionCount - 1].name), (void*)(internalDataPtr - nameLength - 1), nameLength);
+		vcfginternal_memcpy((void*)(newSections[m_sectionCount - 1].name), (void*)(internalDataPtr - nameLength - 1), nameLength);
 		newSections[m_sectionCount - 1].name[nameLength] = '\0';
 
 		m_parsedData = newSections;
@@ -370,8 +457,8 @@ extern "C" {
 	}
 
 	// Forward declare the needed function
-	inline size_t cfvinternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TCFVKey* keyValuePair);
-	inline size_t cfvinternal_parsearray(const char** dataPtr, TCFVKey* keyValuePair) {
+	inline size_t vcfginternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TVCFGKey* keyValuePair);
+	inline size_t vcfginternal_parsearray(const char** dataPtr, TVCFGKey* keyValuePair) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -382,20 +469,20 @@ extern "C" {
 
 		keyValuePair->value = (char*)malloc(8 * sizeof(char));
 		if (keyValuePair->value) {
-			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"[array]\0", 8);
+			vcfginternal_memcpy((void*)(keyValuePair->value), (void*)"[array]\0", 8);
 		}
 		
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
 		size_t arrayIndex = 0;
 		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != ']')) {
 			// Skip all whitespaces and comments
-			if (cfvinternal_skipwhitespace(&internalDataPtr)) continue;
-			if (cfvinternal_skipcomments(&internalDataPtr)) continue;
+			if (vcfginternal_skipwhitespace(&internalDataPtr)) continue;
+			if (vcfginternal_skipcomments(&internalDataPtr)) continue;
 
-			if (cfvinternal_parsearray_keyvalue(&internalDataPtr, arrayIndex, keyValuePair)) {
-				cfvinternal_skipwhitespace(&internalDataPtr);
+			if (vcfginternal_parsearray_keyvalue(&internalDataPtr, arrayIndex, keyValuePair)) {
+				vcfginternal_skipwhitespace(&internalDataPtr);
 				if (*internalDataPtr == ',') {
 					++internalDataPtr;
 					++arrayIndex;
@@ -413,8 +500,8 @@ extern "C" {
 	}
 
 	// Forward declare the needed function
-	inline size_t cfvinternal_parseobject_keyvalue(const char** dataPtr, TCFVKey* keyValuePair);
-	inline size_t cfvinternal_parseobject(const char** dataPtr, TCFVKey* keyValuePair) {
+	inline size_t vcfginternal_parseobject_keyvalue(const char** dataPtr, TVCFGKey* keyValuePair);
+	inline size_t vcfginternal_parseobject(const char** dataPtr, TVCFGKey* keyValuePair) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -425,19 +512,19 @@ extern "C" {
 
 		keyValuePair->value = (char*)malloc(9 * sizeof(char));
 		if (keyValuePair->value) {
-			cfvinternal_memcpy((void*)(keyValuePair->value), (void*)"{object}\0", 9);
+			vcfginternal_memcpy((void*)(keyValuePair->value), (void*)"{object}\0", 9);
 		}
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != '}')) {
 			// Skip all whitespaces and comments
-			if (cfvinternal_skipwhitespace(&internalDataPtr)) continue;
-			if (cfvinternal_skipcomments(&internalDataPtr)) continue;
+			if (vcfginternal_skipwhitespace(&internalDataPtr)) continue;
+			if (vcfginternal_skipcomments(&internalDataPtr)) continue;
 
-			if (cfvinternal_parseobject_keyvalue(&internalDataPtr, keyValuePair)) {
-				cfvinternal_skipwhitespace(&internalDataPtr);
+			if (vcfginternal_parseobject_keyvalue(&internalDataPtr, keyValuePair)) {
+				vcfginternal_skipwhitespace(&internalDataPtr);
 				if (*internalDataPtr == ',') {
 					++internalDataPtr;
 					continue;
@@ -451,7 +538,7 @@ extern "C" {
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
-	inline size_t cfvinternal_parsevalue(const char** dataPtr, TCFVKey *keyValuePair) {
+	inline size_t vcfginternal_parsevalue(const char** dataPtr, TVCFGKey *keyValuePair) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -468,7 +555,7 @@ extern "C" {
 				++internalDataPtr;
 				break;
 			}
-			if (!valueInQuotes && (CFV_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == ',') || (*internalDataPtr == ';'))) break;
+			if (!valueInQuotes && (VCFG_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == ',') || (*internalDataPtr == ';'))) break;
 
 			++internalDataPtr;
 			++valueLength;
@@ -487,30 +574,30 @@ extern "C" {
 			*dataPtr = internalDataPtr;
 			return skippedCount;
 		}
-		cfvinternal_memcpy((void*)(keyValuePair->value), (void*)valueStart, valueLength);
+		vcfginternal_memcpy((void*)(keyValuePair->value), (void*)valueStart, valueLength);
 		keyValuePair->value[valueLength] = '\0';
 
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
 
-	inline size_t cfvinternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TCFVKey* keyValuePair) {
+	inline size_t vcfginternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TVCFGKey* keyValuePair) {
 		if (!dataPtr || !keyValuePair) return 0;
 
 		const char* internalDataPtr = *dataPtr;
 		if (!internalDataPtr) return 0;
 
-		char* keyName = cfvinternal_unsignednumtostr(valueIndex);
+		char* keyName = vcfginternal_unsignednumtostr(valueIndex);
 		if (!keyName) return 0;
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
 
 		// Add the key to the parent key
 		keyValuePair->childCount++;
-		TCFVKey* newChildren = (TCFVKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TCFVKey));
+		TVCFGKey* newChildren = (TVCFGKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TVCFGKey));
 		if (!newChildren) {
 			keyValuePair->childCount--;
 			*dataPtr = internalDataPtr;
@@ -523,17 +610,17 @@ extern "C" {
 
 		keyValuePair->children = newChildren;
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			cfvinternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			cfvinternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else {
-			cfvinternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 
 		skippedCount = internalDataPtr - *dataPtr;
@@ -541,7 +628,7 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t cfvinternal_parseobject_keyvalue(const char** dataPtr, TCFVKey* keyValuePair) {
+	inline size_t vcfginternal_parseobject_keyvalue(const char** dataPtr, TVCFGKey* keyValuePair) {
 		if (!dataPtr || !keyValuePair) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -558,13 +645,13 @@ extern "C" {
 				++internalDataPtr;
 				break;
 			}
-			if (!keyInQuotes && (CFV_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == '='))) break;
+			if (!keyInQuotes && (VCFG_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == '='))) break;
 
 			++internalDataPtr;
 			++keyLength;
 		}
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
@@ -579,7 +666,7 @@ extern "C" {
 		}
 		// Add the key to the parent key
 		keyValuePair->childCount++;
-		TCFVKey* newChildren = (TCFVKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TCFVKey));
+		TVCFGKey* newChildren = (TVCFGKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TVCFGKey));
 		if (!newChildren) {
 			keyValuePair->childCount--;
 			*dataPtr = internalDataPtr;
@@ -594,7 +681,7 @@ extern "C" {
 			*dataPtr = internalDataPtr;
 			return skippedCount;
 		}
-		cfvinternal_memcpy((void*)(newChildren[keyValuePair->childCount - 1].name), (void*)keyStart, keyLength);
+		vcfginternal_memcpy((void*)(newChildren[keyValuePair->childCount - 1].name), (void*)keyStart, keyLength);
 		newChildren[keyValuePair->childCount - 1].name[keyLength] = '\0';
 
 		keyValuePair->children = newChildren;
@@ -602,17 +689,17 @@ extern "C" {
 		// Skip the equal sign
 		++internalDataPtr;
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			cfvinternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			cfvinternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else {
-			cfvinternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 
 		skippedCount = internalDataPtr - *dataPtr;
@@ -620,7 +707,7 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t cfvinternal_parsekeyvalue(const char** dataPtr) {
+	inline size_t vcfginternal_parsekeyvalue(const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -638,13 +725,13 @@ extern "C" {
 				++internalDataPtr;
 				break;
 			}
-			if (!keyInQuotes && (CFV_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == '='))) break;
+			if (!keyInQuotes && (VCFG_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == '='))) break;
 
 			++internalDataPtr;
 			++keyLength;
 		}
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
@@ -659,7 +746,7 @@ extern "C" {
 		}
 		// Add the key to the current section
 		m_parsedData[m_sectionCount - 1].keyCount++;
-		TCFVKey* newKeys = (TCFVKey*)realloc((void*)(m_parsedData[m_sectionCount - 1].keys), m_parsedData[m_sectionCount - 1].keyCount * sizeof(TCFVKey));
+		TVCFGKey* newKeys = (TVCFGKey*)realloc((void*)(m_parsedData[m_sectionCount - 1].keys), m_parsedData[m_sectionCount - 1].keyCount * sizeof(TVCFGKey));
 		if (!newKeys) {
 			m_parsedData[m_sectionCount - 1].keyCount--;
 			*dataPtr = internalDataPtr;
@@ -674,7 +761,7 @@ extern "C" {
 			*dataPtr = internalDataPtr;
 			return skippedCount;
 		}
-		cfvinternal_memcpy((void*)(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name), (void*)keyStart, keyLength);
+		vcfginternal_memcpy((void*)(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name), (void*)keyStart, keyLength);
 		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name[keyLength] = '\0';
 
 		m_parsedData[m_sectionCount - 1].keys = newKeys;
@@ -682,17 +769,17 @@ extern "C" {
 		// Skip the equal sign
 		++internalDataPtr;
 
-		cfvinternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(&internalDataPtr);
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			cfvinternal_parseobject(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+			vcfginternal_parseobject(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			cfvinternal_parsearray(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+			vcfginternal_parsearray(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
 		}
 		else {
-			cfvinternal_parsevalue(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+			vcfginternal_parsevalue(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
 		}
 
 		skippedCount = internalDataPtr - *dataPtr;
@@ -705,11 +792,11 @@ extern "C" {
 	 * 
 	 *	Parses the configuration data stored in the raw data buffer.
 	 *	This function has to be called explicitly when using static buffers.
-	 *	When using cfv_open, this function is called automatically
+	 *	When using vcfg_open, this function is called automatically
 	 * 
 	 *	@returns 0 - Failure, 1 - Success
 	 */
-	inline int cfv_parse() {
+	inline int vcfg_parse() {
 		if (!m_configBuffer || !m_configBufferLength) return 0;
 
 		// We need to store the end of the buffer to avoid overflowing
@@ -719,7 +806,7 @@ extern "C" {
 		const char* internalDataPtr = m_configBuffer;
 
 		// Allocate buffer for the root section
-		m_parsedData = (TCFVSection*)calloc(1, sizeof(TCFVSection));
+		m_parsedData = (TVCFGSection*)calloc(1, sizeof(TVCFGSection));
 		if (!m_parsedData) return 0;
 		m_sectionCount = 1;
 
@@ -728,15 +815,15 @@ extern "C" {
 		//	- Test for edge cases
 		while (internalDataPtr < dataEndPtr) {
 			// Skip all whitespaces and comments
-			if (cfvinternal_skipwhitespace(&internalDataPtr)) continue;
-			if (cfvinternal_skipcomments(&internalDataPtr)) continue;
+			if (vcfginternal_skipwhitespace(&internalDataPtr)) continue;
+			if (vcfginternal_skipcomments(&internalDataPtr)) continue;
 
 			// If there is a section -> [sectionname] -> create a new section
 			// in the parsed data structure and push it to the end
-			if (cfvinternal_createsection(&internalDataPtr)) continue;
+			if (vcfginternal_createsection(&internalDataPtr)) continue;
 
 			// The only thing left to do is to parse the key-value pairs
-			if (cfvinternal_parsekeyvalue(&internalDataPtr)) continue;
+			if (vcfginternal_parsekeyvalue(&internalDataPtr)) continue;
 			
 			// If everything returned with 0 (no data was parsed) just break
 			break;
@@ -747,7 +834,7 @@ extern "C" {
 
 	// For embedded systems we can avoid using file operations and use only statically defined buffers
 	// so in case someone doesn't have the file operations implemented we use preprocessor definitions
-	#if !defined(CFV_BUFFER_ONLY)
+	#if !defined(VCFG_BUFFER_ONLY)
 	#include <stdio.h>
 
 	static FILE* m_currentConfigFile = 0;
@@ -761,7 +848,7 @@ extern "C" {
 	 * 
 	 *	@returns 0 - Failure, 1 - Success
 	 */
-	inline int cfv_open(const char *s_path) {
+	inline int vcfg_open(const char *s_path) {
 		// If a file was already opened close the previous one to avoid memory leaks
 		if (m_currentConfigFile) {
 			fclose(m_currentConfigFile);
@@ -801,11 +888,17 @@ extern "C" {
 
 		m_configBufferLength = fileSize;
 		
-		return cfv_parse();
+		return vcfg_parse();
 	}
-	#endif // CFV_BUFFER_ONLY
+	#endif // VCFG_BUFFER_ONLY
 
-	inline void cfvinternal_clear_key(TCFVKey key) {
+	/**
+	 *	@brief Clear key.
+	 *
+	 *	Clears the entire key by freeing the allocated memory and recursively calling
+	 *	itself for all the nested child keys
+	 */
+	inline void vcfginternal_clear_key(TVCFGKey key) {
 		free((void*)(key.name));
 		key.name = 0;
 
@@ -816,7 +909,7 @@ extern "C" {
 
 		if (key.childCount) {
 			for (uint32_t i = 0; i < key.childCount; i++) {
-				cfvinternal_clear_key(key.children[i]);
+				vcfginternal_clear_key(key.children[i]);
 			}
 			free((void*)(key.children));
 			key.children = 0;
@@ -825,7 +918,12 @@ extern "C" {
 		}
 	}
 
-	inline void cfvinternal_clear_section(TCFVSection section) {
+	/**
+	 *	@brief Clear section.
+	 * 
+	 *	Clears the entire section by clearing all the keys and freeing the allocated memory
+	 */
+	inline void vcfginternal_clear_section(TVCFGSection section) {
 		if (section.name) {
 			free((void*)(section.name));
 			section.name = 0;
@@ -833,7 +931,7 @@ extern "C" {
 
 		if (section.keyCount) {
 			for (uint32_t i = 0; i < section.keyCount; i++) {
-				cfvinternal_clear_key(section.keys[i]);
+				vcfginternal_clear_key(section.keys[i]);
 			}
 			free(section.keys);
 			section.keys = 0;
@@ -847,7 +945,7 @@ extern "C" {
 	 *	Frees all the allocated buffers and closes the configuration files.
 	 *	It has to be run after we end working with the library to avoid memory leaks
 	 */
-	inline void cfv_clear() {
+	inline void vcfg_clear() {
 		if (m_configBuffer) {
 			free((void*)m_configBuffer);
 			m_configBuffer = 0;
@@ -855,7 +953,7 @@ extern "C" {
 
 		if (m_sectionCount) {
 			for (uint32_t i = 0; i < m_sectionCount; i++) {
-				cfvinternal_clear_section(m_parsedData[i]);
+				vcfginternal_clear_section(m_parsedData[i]);
 			}
 
 			free((void*)(m_parsedData));
@@ -864,12 +962,12 @@ extern "C" {
 			m_sectionCount = 0;
 		}
 
-		#if !defined(CFV_BUFFER_ONLY)
+		#if !defined(VCFG_BUFFER_ONLY)
 			if (m_currentConfigFile) {
 				fclose(m_currentConfigFile);
 				m_currentConfigFile = 0;
 			}
-		#endif // CFV_BUFFER_ONLY
+		#endif // VCFG_BUFFER_ONLY
 	}
 
 
@@ -885,11 +983,11 @@ extern "C" {
 	 *
 	 *	@param sectionName - name of the section (NULL for the root section)
 	 *
-	 *	@returns (TCFVSection*) section pointer
+	 *	@returns (TVCFGSection*) section pointer
 	 */
-	inline TCFVSection* cfv_get_section(const char* sectionName) {
+	inline TVCFGSection* vcfg_get_section(const char* sectionName) {
 		for (uint32_t i = 0; i < m_sectionCount; i++) {
-			if (cfvinternal_strcmp(sectionName, m_parsedData[i].name) == 0) {
+			if (vcfginternal_strcmp(sectionName, m_parsedData[i].name) == 0) {
 				return &(m_parsedData[i]);
 			}
 		}
@@ -906,11 +1004,11 @@ extern "C" {
 	 * 
 	 *	@returns (const char*) value of the given key
 	 */
-	inline const char* cfv_get_string(const char* sectionName, const char* keyName) {
-		TCFVSection* section = cfv_get_section(sectionName);
+	inline const char* vcfg_get_string(const char* sectionName, const char* keyName) {
+		TVCFGSection* section = vcfg_get_section(sectionName);
 
 		for (uint32_t i = 0; i < section->keyCount; i++) {
-			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
+			if (vcfginternal_strcmp(section->keys[i].name, keyName) == 0) {
 				return section->keys[i].value;
 			}
 		}
@@ -927,9 +1025,9 @@ extern "C" {
 	 *
 	 *	@returns (int64_t) value of the given key
 	 */
-	inline int64_t cfv_get_int(const char* sectionName, const char* keyName) {
-		const char* stringValue = cfv_get_string(sectionName, keyName);
-		return cfvinternal_strtoint(stringValue);
+	inline int64_t vcfg_get_int(const char* sectionName, const char* keyName) {
+		const char* stringValue = vcfg_get_string(sectionName, keyName);
+		return vcfginternal_strtoint(stringValue);
 	}
 
 	/**
@@ -942,9 +1040,9 @@ extern "C" {
 	 *
 	 *	@returns (double) value of the given key
 	 */
-	inline double cfv_get_float(const char* sectionName, const char* keyName) {
-		const char* stringValue = cfv_get_string(sectionName, keyName);
-		return cfvinternal_strtofloat(stringValue);
+	inline double vcfg_get_float(const char* sectionName, const char* keyName) {
+		const char* stringValue = vcfg_get_string(sectionName, keyName);
+		return vcfginternal_strtofloat(stringValue);
 	}
 
 	/**
@@ -957,9 +1055,9 @@ extern "C" {
 	 *
 	 *	@returns (int [1-true; 0-false]) value of the given key
 	 */
-	inline int cfv_get_bool(const char* sectionName, const char* keyName) {
-		const char* stringValue = cfv_get_string(sectionName, keyName);
-		return (cfvinternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
+	inline int vcfg_get_bool(const char* sectionName, const char* keyName) {
+		const char* stringValue = vcfg_get_string(sectionName, keyName);
+		return (vcfginternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
 	}
 
 	/**
@@ -970,13 +1068,13 @@ extern "C" {
 	 *	@param sectionName - name of the section (NULL for the root section)
 	 *	@param keyName - name of the key node
 	 *
-	 *	@returns (const CFV_Node*) entire node of the given key
+	 *	@returns (const VCFG_Node*) entire node of the given key
 	 */
-	inline const CFV_Node* cfv_get_node(const char* sectionName, const char* keyName) {
-		TCFVSection* section = cfv_get_section(sectionName);
+	inline const VCFG_Node* vcfg_get_node(const char* sectionName, const char* keyName) {
+		TVCFGSection* section = vcfg_get_section(sectionName);
 
 		for (uint32_t i = 0; i < section->keyCount; i++) {
-			if (cfvinternal_strcmp(section->keys[i].name, keyName) == 0) {
+			if (vcfginternal_strcmp(section->keys[i].name, keyName) == 0) {
 				return &(section->keys[i]);
 			}
 		}
@@ -991,14 +1089,14 @@ extern "C" {
 	 *	@param parentNode - node of the element to search in (NULL for the root section)
 	 *	@param keyName - name of the key node
 	 *
-	 *	@returns (const CFV_Node*) entire node of the given key
+	 *	@returns (const VCFG_Node*) entire node of the given key
 	 */
-	inline const CFV_Node* cfv_get_node_from_node(const CFV_Node* parentNode, const char* keyName) {
+	inline const VCFG_Node* vcfg_get_node_from_node(const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return cfv_get_node(0, keyName);
+		if (!parentNode) return vcfg_get_node(0, keyName);
 
 		for (uint32_t i = 0; i < parentNode->childCount; i++) {
-			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
+			if (vcfginternal_strcmp(parentNode->children[i].name, keyName) == 0) {
 				return &(parentNode->children[i]);
 			}
 		}
@@ -1015,12 +1113,12 @@ extern "C" {
 	 *
 	 *	@returns (const char*) value of the given key
 	 */
-	inline const char* cfv_get_string_from_node(const CFV_Node* parentNode, const char* keyName) {
+	inline const char* vcfg_get_string_from_node(const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return cfv_get_string(0, keyName);
+		if (!parentNode) return vcfg_get_string(0, keyName);
 
 		for (uint32_t i = 0; i < parentNode->childCount; i++) {
-			if (cfvinternal_strcmp(parentNode->children[i].name, keyName) == 0) {
+			if (vcfginternal_strcmp(parentNode->children[i].name, keyName) == 0) {
 				return parentNode->children[i].value;
 			}
 		}
@@ -1037,12 +1135,12 @@ extern "C" {
 	 *
 	 *	@returns (int64_t) value of the given key
 	 */
-	inline int64_t cfv_get_int_from_node(const CFV_Node* parentNode, const char* keyName) {
+	inline int64_t vcfg_get_int_from_node(const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return cfv_get_int(0, keyName);
+		if (!parentNode) return vcfg_get_int(0, keyName);
 		
-		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
-		return cfvinternal_strtoint(stringValue);
+		const char* stringValue = vcfg_get_string_from_node(parentNode, keyName);
+		return vcfginternal_strtoint(stringValue);
 	}
 
 	/**
@@ -1055,12 +1153,12 @@ extern "C" {
 	 *
 	 *	@returns (double) value of the given key
 	 */
-	inline double cfv_get_float_from_node(const CFV_Node* parentNode, const char* keyName) {
+	inline double vcfg_get_float_from_node(const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return cfv_get_float(0, keyName);
+		if (!parentNode) return vcfg_get_float(0, keyName);
 
-		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
-		return cfvinternal_strtofloat(stringValue);
+		const char* stringValue = vcfg_get_string_from_node(parentNode, keyName);
+		return vcfginternal_strtofloat(stringValue);
 	}
 
 	/**
@@ -1073,12 +1171,12 @@ extern "C" {
 	 *
 	 *	@returns (int [1-true; 0-false]) value of the given key
 	 */
-	inline int cfv_get_bool_from_node(const CFV_Node* parentNode, const char* keyName) {
+	inline int vcfg_get_bool_from_node(const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return cfv_get_bool(0, keyName);
+		if (!parentNode) return vcfg_get_bool(0, keyName);
 
-		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
-		return (cfvinternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
+		const char* stringValue = vcfg_get_string_from_node(parentNode, keyName);
+		return (vcfginternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
 	}
 
 #ifdef __cplusplus
