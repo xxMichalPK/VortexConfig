@@ -151,6 +151,45 @@ extern "C" {
 		return (negative ? -result : result);
 	}
 
+	inline double cfvinternal_strtofloat(const char* str) {
+		if (!str) return -1;
+
+		int negative = 0;
+		double result = 0;
+
+		if (*str == '-') {
+			negative = 1;
+			++str;
+		}
+
+		// If the first character is not a number, nor a dot, there is no point in running the loop
+		if (!CFV_IS_NUMBER(*str) && *str != '.') return -1;
+
+		int isDecimalPart = 0;
+		int decimalPlaces = 0;
+		while (*str != '\0') {
+			if (!CFV_IS_NUMBER(*str) && *str != '.') break;
+			if (isDecimalPart && *str == '.') break;	// In case there is a second dot
+			if (*str == '.') {
+				isDecimalPart = 1;
+				++str;
+				continue;
+			}
+			if (isDecimalPart) ++decimalPlaces;
+
+			result *= 10;
+			result += (*str) - '0';
+			++str;
+		}
+
+		while (isDecimalPart && decimalPlaces) {
+			result /= 10;
+			--decimalPlaces;
+		}
+
+		return (negative ? -result : result);
+	}
+
 	inline char* cfvinternal_unsignednumtostr(size_t number) {
 		char* result = (char*)malloc(22 * sizeof(char));
 		if (!result) return 0;
@@ -894,6 +933,21 @@ extern "C" {
 	}
 
 	/**
+	 *	@brief Get floating point value from key.
+	 *
+	 *	Returns the value associated with the given key in the desired section
+	 *
+	 *	@param sectionName - name of the section (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (double) value of the given key
+	 */
+	inline double cfv_get_float(const char* sectionName, const char* keyName) {
+		const char* stringValue = cfv_get_string(sectionName, keyName);
+		return cfvinternal_strtofloat(stringValue);
+	}
+
+	/**
 	 *	@brief Get key node.
 	 *
 	 *	Returns the entire node associated with the given key in the desired section
@@ -974,6 +1028,24 @@ extern "C" {
 		
 		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
 		return cfvinternal_strtoint(stringValue);
+	}
+
+	/**
+	 *	@brief Get floating point value from key inside the given node.
+	 *
+	 *	Returns the value associated with the given key in the desired node
+	 *
+	 *	@param parentNode - node of the element to search in (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (double) value of the given key
+	 */
+	inline double cfv_get_float_from_node(const CFV_Node* parentNode, const char* keyName) {
+		// If there's no parent use the root section as parent
+		if (!parentNode) return cfv_get_float(0, keyName);
+
+		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
+		return cfvinternal_strtofloat(stringValue);
 	}
 
 #ifdef __cplusplus
