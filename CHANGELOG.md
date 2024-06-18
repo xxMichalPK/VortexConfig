@@ -29,3 +29,18 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Improper array parsing code where the comma next to a value that wasn't in quotes was included in the returned value
+
+
+## [0.2] - 2024-06-18
+
+### Added
+
+- Integer values support
+- Floating point values support
+- Boolean values support
+ 
+### Changed
+
+- The way configuration files are opened (from a+b mode to rb mode [basically from read and write to read only mode])
+
+### Fixed
