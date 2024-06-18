@@ -27,8 +27,8 @@
 
 #pragma once
 // Include guards just in case
-#ifndef SIMPLE_CONFIG_LIB
-#define SIMPLE_CONFIG_LIB 1
+#ifndef VORTEX_CONFIG_LIB
+#define VORTEX_CONFIG_LIB 1
 
 // Simplify os detection
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
@@ -926,4 +926,4 @@ extern "C" {
 	
 #endif // __cplusplus
 
-#endif // SIMPLE_CONFIG_LIB
+#endif // VORTEX_CONFIG_LIB
