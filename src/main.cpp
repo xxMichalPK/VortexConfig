@@ -6,7 +6,8 @@
 // Here we test the library
 int main() {
 	if (!cfv_open("Sample.cfv")) {
-		printf("Failed to open file!\n\r");
+		printf("Failed to open the specified file!\n\r");
+		return 1;
 	}
 
 	std::cout << "Testing section separation:\n\r";
@@ -32,7 +33,7 @@ int main() {
 	const char* insideObjectValue1 = cfv_get_string_from_node(objectNode, "inner_key_1");
 	const char* insideObjectArrayValue = cfv_get_string_from_node(objectNode, "inner_array");
 	const CFV_Node* insideObjectArray = cfv_get_node_from_node(objectNode, "inner_array");
-	const char* doubleNestedValue = cfv_get_string_from_node(insideObjectArray, "0");
+	int doubleNestedValue = cfv_get_int_from_node(insideObjectArray, "0");
 	std::cout << "The value of the \"an_object\" object is: " << objectValue << "\n\r";
 	std::cout << "The value of the \"inner_key_1\" inside the object is: " << insideObjectValue1 << "\n\r";
 	std::cout << "The value of the \"inner_array\" inside the object is: " << insideObjectArrayValue << "\n\r";

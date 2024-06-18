@@ -42,6 +42,10 @@
 	#define CFV_IS_WHITESPACE(ch) ((ch == ' ') || ((ch >= '\b') && (ch <= '\r')))
 #endif
 
+#ifndef CFV_IS_NUMBER
+	#define CFV_IS_NUMBER(ch) ((ch >= '0') && (ch <= '9'))
+#endif
+
 // All the necessary C code
 #ifdef __cplusplus
 extern "C" {
@@ -121,6 +125,31 @@ extern "C" {
 			return strcmp(str1, str2);
 		}
 	#endif
+
+	inline int64_t cfvinternal_strtoint(const char* str) {
+		if (!str) return -1;
+
+		int negative = 0;
+		int64_t result = 0;
+
+		if (*str == '-') {
+			negative = 1;
+			++str;
+		}
+
+		// If the first character is not a number there is no point in running the loop
+		if (!CFV_IS_NUMBER(*str)) return -1;
+
+		while (*str != '\0') {
+			if (!CFV_IS_NUMBER(*str)) break;
+
+			result *= 10;
+			result += (*str) - '0';
+			++str;
+		}
+
+		return (negative ? -result : result);
+	}
 
 	inline char* cfvinternal_unsignednumtostr(size_t number) {
 		char* result = (char*)malloc(22 * sizeof(char));
@@ -701,9 +730,9 @@ extern "C" {
 		}
 		
 		// Open the desired file
-		errno_t fileOpenFailed = fopen_s(&m_currentConfigFile, s_path, "a+b");
+		errno_t fileOpenFailed = fopen_s(&m_currentConfigFile, s_path, "rb");
 		if (fileOpenFailed || !m_currentConfigFile) {
-			perror("Failed to open the specified file\n\r");
+			perror("FOPEN()");
 			return 0; // Failure
 		}
 
@@ -711,9 +740,6 @@ extern "C" {
 		fseek(m_currentConfigFile, 0, SEEK_END);
 		size_t fileSize = ftell(m_currentConfigFile);
 		fseek(m_currentConfigFile, 0, SEEK_SET);
-
-		// The file was created so just exit with success
-		if (fileSize == 0) return 1;
 
 		// Clear the previously used buffer
 		if (m_configBuffer) {
@@ -724,13 +750,13 @@ extern "C" {
 		// Allocate memory
 		m_configBuffer = (char*)malloc((fileSize + 1) * sizeof(char));
 		if (!m_configBuffer) {
-			perror("Failed to allocate memory for the configuration file\n\r");
+			perror("MALLOC()");
 			return 0;
 		}
 
 		// Read the file contents into the buffer
 		if (fread((void*)m_configBuffer, sizeof(char), fileSize, m_currentConfigFile) != fileSize) {
-			perror("Failed to read the entire configuration file\n\r");
+			perror("FREAD()");
 			return 0;
 		};
 
@@ -853,6 +879,21 @@ extern "C" {
 	}
 
 	/**
+	 *	@brief Get integer value from key.
+	 *
+	 *	Returns the value associated with the given key in the desired section
+	 *
+	 *	@param sectionName - name of the section (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (int64_t) value of the given key
+	 */
+	inline int64_t cfv_get_int(const char* sectionName, const char* keyName) {
+		const char* stringValue = cfv_get_string(sectionName, keyName);
+		return cfvinternal_strtoint(stringValue);
+	}
+
+	/**
 	 *	@brief Get key node.
 	 *
 	 *	Returns the entire node associated with the given key in the desired section
@@ -915,6 +956,24 @@ extern "C" {
 			}
 		}
 		return 0;
+	}
+
+	/**
+	 *	@brief Get integer value from key inside the given node.
+	 *
+	 *	Returns the value associated with the given key in the desired node
+	 *
+	 *	@param parentNode - node of the element to search in (NULL for the root section)
+	 *	@param keyName - name of the key holding the desired value
+	 *
+	 *	@returns (int64_t) value of the given key
+	 */
+	inline int64_t cfv_get_int_from_node(const CFV_Node* parentNode, const char* keyName) {
+		// If there's no parent use the root section as parent
+		if (!parentNode) return cfv_get_int(0, keyName);
+		
+		const char* stringValue = cfv_get_string_from_node(parentNode, keyName);
+		return cfvinternal_strtoint(stringValue);
 	}
 
 #ifdef __cplusplus
