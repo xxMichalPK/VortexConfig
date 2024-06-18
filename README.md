@@ -7,7 +7,7 @@ This parser supports a unique configuration format and provides an easy-to-use i
 ### Features
 
 - **Cross-Platform**: Works on Windows, macOS, Linux, and embedded systems.
-- **Minimal Requirements**: Only requires `malloc`, `calloc`, `realloc`, and `free` from the C standard library, optionally `fopen`, `fclose`, `freak`, `fseek` and `ftell` for reading configuration files.
+- **Minimal Requirements**: Only requires `malloc`, `calloc`, `realloc`, and `free` from the C standard library, optionally `fopen`, `fclose`, `fread`, `fseek` and `ftell` for reading configuration files.
 - **Custom Syntax**: Supports a unique, intuitive configuration syntax with sections, key-value pairs, arrays, and objects.
 - **Comment Support**: Inline and block comments for better readability and documentation of configuration files.
 

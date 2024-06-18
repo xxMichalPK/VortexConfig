@@ -1,5 +1,5 @@
 ﻿/*
- * SimpleConfigLib.h - A simple library for reading and generating configuration files
+ * VortexConfig.h - A simple library for reading and generating configuration files
  *
  * MIT License
  * 
