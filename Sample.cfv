@@ -1,0 +1,52 @@
+// VortexConfig v0.1, Copyright (C) Michał Pazurek
+
+/*
+ *	This is a sample configuration file made to test the VortexConfig parser.
+ *	The parser should support line and block comments, standard key=value pairs,
+ *	keys and values in quotes, objects (defined with curly brackets {} with nested key=value pairs,
+ *	separated with a comma ,), arrays (defined with square brackets [] with values only, also separated
+ *	with a comma ,)
+ *
+ *	The parser is in development phase so it may crash or return false values in some edge cases!
+ */
+
+// TODO:
+//   Add support for retrieving different formats (strings, integers, floats, booleans etc.)
+
+is_root_section = true		// Those keys are stored in the root section (accessed with the null pointer or 0)
+should_others_contribute = "it all depends"
+
+// From now on we use sections to allow for duplicate key names across different sections
+[first_section]
+is_root_section = false
+lines_of_code = 924
+satisfaction_level = 66.99	// It is during the alpha tests :P
+
+"should this keytype stay?" = "probably"
+
+[space section]
+does_this_work = "Hell yeah!"
+
+[nested_keys]
+an_object = {
+    inner_key_1 = "Welcome inside an abject",
+    inner_key_2 = 973,
+
+    inner_array = [
+        98,
+        2,
+        5
+    ]
+}
+
+an_array = [
+    "hello",
+    "from",
+    "the",
+    "array"
+]
+
+// NOTE:
+//   As for now, I can tell that the "inner_array" inside the object will not work
+//   because of how the arrays are handled. But it is a quick fix so it should be
+//   patched soon
