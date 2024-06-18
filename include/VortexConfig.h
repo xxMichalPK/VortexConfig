@@ -333,6 +333,9 @@ extern "C" {
 					++arrayIndex;
 					continue;
 				}
+
+				// If there was no comma skip to the end of the array
+				while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != ']')) ++internalDataPtr;
 			}
 		}
 
@@ -371,6 +374,8 @@ extern "C" {
 					++internalDataPtr;
 					continue;
 				}
+				// If there was no comma skip to the end of the object
+				while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != '}')) ++internalDataPtr;
 			}
 		}
 
@@ -395,7 +400,7 @@ extern "C" {
 				++internalDataPtr;
 				break;
 			}
-			if (!valueInQuotes && CFV_IS_WHITESPACE(*internalDataPtr)) break;
+			if (!valueInQuotes && (CFV_IS_WHITESPACE(*internalDataPtr) || (*internalDataPtr == ',') || (*internalDataPtr == ';'))) break;
 
 			++internalDataPtr;
 			++valueLength;
