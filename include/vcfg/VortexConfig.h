@@ -621,7 +621,7 @@ extern "C" {
 	/**
 	 *	@brief Open configuration file.
 	 * 
-	 *	Opens/Creates the configuration file and reads the content to the internal buffer
+	 *	Opens the configuration file and reads the content to the internal buffer
 	 * 
 	 *	@param s_path - path to the configuration file
 	 * 
@@ -960,11 +960,6 @@ extern "C" {
 
 #ifdef __cplusplus
 }
-#endif // __cplusplus
-
-// C++ wrapper
-#ifdef __cplusplus
-	
 #endif // __cplusplus
 
 #endif // VORTEX_CONFIG_H
