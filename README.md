@@ -22,38 +22,75 @@ This parser supports a unique configuration format and provides an easy-to-use i
 
 1. **Include the Parser Code**
 
-   Copy the `VortexConfig.h` header from the `include` directory into your project
+   Copy the `vcfg` directory from the `include` directory into your project include directory
 
 2. **Include the Header File**
 
 	```c
-	#include "VortexConfig.h"
+	#include "vcfg/VortexConfig.h"
 	```
 
 3. **Initialize the Parser**
 
+	**C**
+
 	```c
-	vcfg_open("Sample.vcfg");
+	VCFG_Parser parserObject = { 0 };
+	vcfg_open(&parserObject, "File.vcfg");
 	```
 
 	or
 
 	```c
-	vcfg_set_buffer([your_buffer], [size_of_the_buffer_]);
-	vcfg_parse();
+	VCFG_Parser parserObject = { 0 };
+	const char myBuffer[512] = { .... };
+	vcfg_set_buffer(&parserObject, myBuffer, sizeof(myBuffer));
+	vcfg_parse(&parserObject);
+	```
+
+	**C++**
+
+	```cpp
+	VCFG_Parser parserObject;
+	parserObject.Open("File");
+	```
+
+	or
+
+	```cpp
+	VCFG_Parser parserObject;
+	const char myBuffer[512] = { .... };
+	parserObject.SetBuffer(myBuffer, sizeof(myBuffer));
+	parserObject.Parse();
 	```
 
 4. **Access Parsed Data**
 
+	**C**	
+
 	```c
-	const char* value = vcfg_get_string("section", "key");
-	int intVal = vcfg_get_int("section", "intKey");
-	float floatVal = vcfg_get_float("section", "floatKey");
-	bool boolVal = vcfg_get_bool("section", "boolKey");
+	const char* value = vcfg_get_string(&parserObject, "section", "key");
+	int intVal = vcfg_get_int(&parserObject, "section", "intKey");
+	float floatVal = vcfg_get_float(&parserObject, "section", "floatKey");
+	bool boolVal = vcfg_get_bool(&parserObject, "section", "boolKey");
 
 	// Nested keys
-	const CFV_Node* node = vcfg_get_node("section", "key");
-	const char* nestedValue = vcfg_get_string_from_node(node, "key");
+	const CFV_Node* node = vcfg_get_node(&parserObject, "section", "key");
+	const char* nestedValue = vcfg_get_string_from_node(&parserObject, node, "key");
+	// ...
+	```
+
+	**C++**
+
+	```cpp
+	const char* value = parserObject.GetString("section", "key");
+	int intVal = parserObject.GetInt("section", "intKey");
+	float floatVal = parserObject.GetFloat("section", "floatKey");
+	bool boolVal = parserObject.GetBool("section", "boolKey");
+
+	// Nested keys
+	const CFV_Node* node = parserObject.GetNode("section", "key");
+	const char* nestedValue = parserObject.GetNode(node, "key");
 	// ...
 	```
 

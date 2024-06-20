@@ -25,239 +25,20 @@
  * 
  */
 
-#pragma once
-// Include guards just in case
-#ifndef VORTEX_CONFIG_LIB
-#define VORTEX_CONFIG_LIB 1
+#ifndef VORTEX_CONFIG_H
+#define VORTEX_CONFIG_H 1
 
-// Simplify os detection
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-	#define OS_WINDOWS 1
-#elif defined(__linux__)
-	#define OS_LINUX 1
-#endif
-
-// Helper macros
-#ifndef VCFG_IS_WHITESPACE
-	#define VCFG_IS_WHITESPACE(ch) ((ch == ' ') || ((ch >= '\b') && (ch <= '\r')))
-#endif
-
-#ifndef VCFG_IS_NUMBER
-	#define VCFG_IS_NUMBER(ch) ((ch >= '0') && (ch <= '9'))
-#endif
+#include "macros.h"
+#include "parser.h"
+#include "strconv.h"
 
 // All the necessary C code
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-	#include <stdint.h>
 	// We need stdlib.h for malloc, calloc, realloc and free.
 	// Those can be replaced by a custom implementation in an embedded system
 	#include <stdlib.h>
-
-	typedef struct SVCFGKey {
-		char* name;
-		char* value;
-		uint32_t childCount;
-		struct SVCFGKey* children;
-	} TVCFGKey;
-	typedef TVCFGKey VCFG_Node;
-
-	typedef struct SVCFGSection {
-		char* name;
-		uint32_t keyCount;
-		TVCFGKey* keys;
-	} TVCFGSection;
-
-	// The raw data of the configuration (file)
-	static const char* m_configBuffer = 0;
-	static size_t m_configBufferLength = 0;
-
-	// The parsed data
-	static TVCFGSection* m_parsedData = 0;
-	static uint32_t m_sectionCount = 0;
-
-	// Compatibility functions for embedded systems
-	#if (!defined(OS_WINDOWS) && !defined(OS_LINUX)) || defined(VCFG_EMBEDDED_FUNCTIONS)
-		/**
-		 *	@brief C library memcpy implementation
-		 */
-		inline void vcfginternal_memcpy(void* dst, const void* src, size_t count) {
-			unsigned char* srcPtr = (unsigned char*)src;
-			unsigned char* dstPtr = (unsigned char*)dst;
-
-			while (count--) {
-				*(dstPtr++) = *(srcPtr++);
-			}
-		}
-
-		/**
-		 *	@brief C library strlen implementation
-		 */
-		inline size_t vcfginternal_strlen(const char* str) {
-			size_t len = 0;
-			while (*(str++) != '\0') ++len;
-			return len;
-		}
-
-		/**
-		 *	@brief C library strcmp implementation
-		 */
-		inline int vcfginternal_strcmp(const char* str1, const char* str2) {
-			if (str1 == str2) return 0;
-			if (str1 == 0 || str2 == 0) return -1;
-			
-			while (*str1 == *str2) {
-				if (*str1 == '\0' || *str2 == '\0') {
-					return 0;
-				}
-				++str1;
-				++str2;
-			}
-
-			return (*str1 - *str2);
-		}
-	#else
-		#include <string.h>
-
-		/**
-		 *	@brief C library memcpy implementation
-		 */
-		inline void vcfginternal_memcpy(void* dst, const void* src, size_t count) {
-			memcpy(dst, src, count);
-		}
-
-		/**
-		 *	@brief C library strlen implementation
-		 */
-		inline size_t vcfginternal_strlen(const char* str) {
-			return strlen(str);
-		}
-
-		/**
-		 *	@brief C library strcmp implementation
-		 */
-		inline int vcfginternal_strcmp(const char* str1, const char* str2) {
-			if (str1 == str2) return 0;
-			if (str1 == 0 || str2 == 0) return -999999;
-			return strcmp(str1, str2);
-		}
-	#endif
-
-	/**
-	 *	@brief String to integer conversion.
-	 * 
-	 *	@param str - the stringified number
-	 * 
-	 *	@returns (int64_t) the number as an integer
-	 */
-	inline int64_t vcfginternal_strtoint(const char* str) {
-		if (!str) return -1;
-
-		int negative = 0;
-		int64_t result = 0;
-
-		if (*str == '-') {
-			negative = 1;
-			++str;
-		}
-
-		// If the first character is not a number there is no point in running the loop
-		if (!VCFG_IS_NUMBER(*str)) return -1;
-
-		while (*str != '\0') {
-			if (!VCFG_IS_NUMBER(*str)) break;
-
-			result *= 10;
-			result += (*str) - '0';
-			++str;
-		}
-
-		return (negative ? -result : result);
-	}
-
-	/**
-	 *	@brief String to floating point number conversion.
-	 *
-	 *	@param str - the stringified number
-	 *
-	 *	@returns (double) the number as a floating point number
-	 */
-	inline double vcfginternal_strtofloat(const char* str) {
-		if (!str) return -1;
-
-		int negative = 0;
-		double result = 0;
-
-		if (*str == '-') {
-			negative = 1;
-			++str;
-		}
-
-		// If the first character is not a number, nor a dot, there is no point in running the loop
-		if (!VCFG_IS_NUMBER(*str) && *str != '.') return -1;
-
-		int isDecimalPart = 0;
-		int decimalPlaces = 0;
-		while (*str != '\0') {
-			if (!VCFG_IS_NUMBER(*str) && *str != '.') break;
-			if (isDecimalPart && *str == '.') break;	// In case there is a second dot
-			if (*str == '.') {
-				isDecimalPart = 1;
-				++str;
-				continue;
-			}
-			if (isDecimalPart) ++decimalPlaces;
-
-			result *= 10;
-			result += (*str) - '0';
-			++str;
-		}
-
-		while (isDecimalPart && decimalPlaces) {
-			result /= 10;
-			--decimalPlaces;
-		}
-
-		return (negative ? -result : result);
-	}
-
-	/**
-	 *	@brief Unsigned number to string conversion.
-	 * 
-	 *	WARNING: this function works only on positive numbers that fit in size_t
-	 *	32bit numbers for 32bit machines and 64bit numbers for 64bit machines!
-	 *
-	 *	@param number - the number to convert
-	 *
-	 *	@returns (char*) the number as a string (null terminated)
-	 */
-	inline char* vcfginternal_unsignednumtostr(size_t number) {
-		char* result = (char*)malloc(22 * sizeof(char));
-		if (!result) return 0;
-
-		if (number == 0) {
-			result[0] = '0';
-			result[1] = '\0';
-			return result;
-		}
-
-		int pos = 0;
-		while (number > 0) {
-			result[pos++] = (number % 10) + '0';
-			number /= 10;
-		}
-
-		result[pos--] = '\0';
-
-		for (int i = 0; i < pos; i++, pos--) {
-			char tmp = result[pos];
-			result[pos] = result[i];
-			result[i] = tmp;
-		}
-
-		return result;
-	}
 
 	/**
 	 *	@brief Set config buffer.
@@ -267,15 +48,15 @@ extern "C" {
 	 *	@param inputBuffer - the desired raw data buffer
 	 *	@param dataLength - length of the input
 	 */
-	inline void vcfg_set_buffer(const char* inputBuffer, size_t dataLength) {
+	inline void vcfg_set_buffer(VCFG_Parser* parserObj, const char* inputBuffer, size_t dataLength) {
 		// If the buffer was already set try to free it
-		if (m_configBuffer) {
-			free((void*)m_configBuffer);
-			m_configBuffer = 0;
+		if (parserObj->m_configBuffer) {
+			free((void*)(parserObj->m_configBuffer));
+			parserObj->m_configBuffer = 0;
 		}
 
-		m_configBuffer = inputBuffer;
-		m_configBufferLength = dataLength;
+		parserObj->m_configBuffer = inputBuffer;
+		parserObj->m_configBufferLength = dataLength;
 	}
 
 	/**
@@ -287,13 +68,13 @@ extern "C" {
 	 * 
 	 *	@returns (size_t) number of bytes skipped
 	 */
-	inline size_t vcfginternal_skipwhitespace(const char **dataPtr) {
+	inline size_t vcfginternal_skipwhitespace(VCFG_Parser* parserObj, const char **dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
 		if (!internalDataPtr) return 0;
 
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while (VCFG_IS_WHITESPACE(*internalDataPtr) && (internalDataPtr < dataEndPtr)) {
 			++internalDataPtr;
 		}
@@ -314,7 +95,7 @@ extern "C" {
 	 *
 	 *	@returns (size_t) number of bytes skipped
 	 */
-	inline size_t vcfginternal_skiplinecomment(const char** dataPtr) {
+	inline size_t vcfginternal_skiplinecomment(VCFG_Parser* parserObj, const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -323,7 +104,7 @@ extern "C" {
 		// Check if we have a comment "//"
 		if ((*internalDataPtr != '/') || (*(internalDataPtr + 1) != '/')) return 0;
 
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != '\n')) {
 			++internalDataPtr;
 		}
@@ -346,7 +127,7 @@ extern "C" {
 	 *
 	 *	@returns (size_t) number of bytes skipped
 	 */
-	inline size_t vcfginternal_skipblockcomment(const char** dataPtr) {
+	inline size_t vcfginternal_skipblockcomment(VCFG_Parser* parserObj, const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -358,7 +139,7 @@ extern "C" {
 		// Skip the first comment block characters to avoid something like this: "/*/"
 		internalDataPtr += 2;
 
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr)) {
 			if ((*internalDataPtr == '*') && (*(internalDataPtr + 1) == '/')) {
 				internalDataPtr += 2;
@@ -383,15 +164,15 @@ extern "C" {
 	 *
 	 *	@returns (size_t) number of bytes skipped
 	 */
-	inline size_t vcfginternal_skipcomments(const char** dataPtr) {
+	inline size_t vcfginternal_skipcomments(VCFG_Parser* parserObj, const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
 		if (!internalDataPtr) return 0;
 
 		size_t skippedCount = 0;
-		skippedCount += vcfginternal_skiplinecomment(&internalDataPtr);
-		skippedCount += vcfginternal_skipblockcomment(&internalDataPtr);
+		skippedCount += vcfginternal_skiplinecomment(parserObj, &internalDataPtr);
+		skippedCount += vcfginternal_skipblockcomment(parserObj, &internalDataPtr);
 
 		if ((internalDataPtr == *dataPtr) || (skippedCount == 0)) return 0;
 
@@ -409,7 +190,7 @@ extern "C" {
 	 *
 	 *	@returns (size_t) number of bytes skipped
 	 */
-	inline size_t vcfginternal_createsection(const char** dataPtr) {
+	inline size_t vcfginternal_createsection(VCFG_Parser* parserObj, const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -421,7 +202,7 @@ extern "C" {
 		// of the previously added section (for that reason section names have to be unique)
 		++internalDataPtr;
 		size_t nameLength = 0;
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((*internalDataPtr != ']') && (internalDataPtr < dataEndPtr)) {
 			++internalDataPtr;
 			++nameLength;
@@ -433,32 +214,32 @@ extern "C" {
 		// We don't allow empty sections -> []
 		if (nameLength == 0) return skippedCount;
 
-		++m_sectionCount;
-		TVCFGSection* newSections = (TVCFGSection*)realloc(m_parsedData, m_sectionCount * sizeof(TVCFGSection));
+		++(parserObj->m_sectionCount);
+		VCFGSection_t* newSections = (VCFGSection_t*)realloc(parserObj->m_parsedData, (parserObj->m_sectionCount) * sizeof(VCFGSection_t));
 		if (!newSections) {
-			--m_sectionCount;
+			--(parserObj->m_sectionCount);
 			return skippedCount;
 		}
 
-		newSections[m_sectionCount - 1].keyCount = 0;
-		newSections[m_sectionCount - 1].keys = 0;
-		newSections[m_sectionCount - 1].name = (char*)malloc(nameLength + 1);
-		if (!(newSections[m_sectionCount - 1].name)) {
-			--m_sectionCount;
+		newSections[(parserObj->m_sectionCount) - 1].keyCount = 0;
+		newSections[(parserObj->m_sectionCount) - 1].keys = 0;
+		newSections[(parserObj->m_sectionCount) - 1].name = (char*)malloc(nameLength + 1);
+		if (!(newSections[(parserObj->m_sectionCount) - 1].name)) {
+			--(parserObj->m_sectionCount);
 			return skippedCount;
 		}
 
-		vcfginternal_memcpy((void*)(newSections[m_sectionCount - 1].name), (void*)(internalDataPtr - nameLength - 1), nameLength);
-		newSections[m_sectionCount - 1].name[nameLength] = '\0';
+		vcfginternal_memcpy((void*)(newSections[(parserObj->m_sectionCount) - 1].name), (void*)(internalDataPtr - nameLength - 1), nameLength);
+		newSections[(parserObj->m_sectionCount) - 1].name[nameLength] = '\0';
 
-		m_parsedData = newSections;
+		parserObj->m_parsedData = newSections;
 
 		return skippedCount;
 	}
 
 	// Forward declare the needed function
-	inline size_t vcfginternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TVCFGKey* keyValuePair);
-	inline size_t vcfginternal_parsearray(const char** dataPtr, TVCFGKey* keyValuePair) {
+	inline size_t vcfginternal_parsearray_keyvalue(VCFG_Parser* parserObj, const char** dataPtr, size_t valueIndex, VCFGKey_t* keyValuePair);
+	inline size_t vcfginternal_parsearray(VCFG_Parser* parserObj, const char** dataPtr, VCFGKey_t* keyValuePair) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -472,17 +253,17 @@ extern "C" {
 			vcfginternal_memcpy((void*)(keyValuePair->value), (void*)"[array]\0", 8);
 		}
 		
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		size_t arrayIndex = 0;
 		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != ']')) {
 			// Skip all whitespaces and comments
-			if (vcfginternal_skipwhitespace(&internalDataPtr)) continue;
-			if (vcfginternal_skipcomments(&internalDataPtr)) continue;
+			if (vcfginternal_skipwhitespace(parserObj, &internalDataPtr)) continue;
+			if (vcfginternal_skipcomments(parserObj, &internalDataPtr)) continue;
 
-			if (vcfginternal_parsearray_keyvalue(&internalDataPtr, arrayIndex, keyValuePair)) {
-				vcfginternal_skipwhitespace(&internalDataPtr);
+			if (vcfginternal_parsearray_keyvalue(parserObj, &internalDataPtr, arrayIndex, keyValuePair)) {
+				vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 				if (*internalDataPtr == ',') {
 					++internalDataPtr;
 					++arrayIndex;
@@ -500,8 +281,8 @@ extern "C" {
 	}
 
 	// Forward declare the needed function
-	inline size_t vcfginternal_parseobject_keyvalue(const char** dataPtr, TVCFGKey* keyValuePair);
-	inline size_t vcfginternal_parseobject(const char** dataPtr, TVCFGKey* keyValuePair) {
+	inline size_t vcfginternal_parseobject_keyvalue(VCFG_Parser* parserObj, const char** dataPtr, VCFGKey_t* keyValuePair);
+	inline size_t vcfginternal_parseobject(VCFG_Parser* parserObj, const char** dataPtr, VCFGKey_t* keyValuePair) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -515,16 +296,16 @@ extern "C" {
 			vcfginternal_memcpy((void*)(keyValuePair->value), (void*)"{object}\0", 9);
 		}
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr) && (*internalDataPtr != '}')) {
 			// Skip all whitespaces and comments
-			if (vcfginternal_skipwhitespace(&internalDataPtr)) continue;
-			if (vcfginternal_skipcomments(&internalDataPtr)) continue;
+			if (vcfginternal_skipwhitespace(parserObj, &internalDataPtr)) continue;
+			if (vcfginternal_skipcomments(parserObj, &internalDataPtr)) continue;
 
-			if (vcfginternal_parseobject_keyvalue(&internalDataPtr, keyValuePair)) {
-				vcfginternal_skipwhitespace(&internalDataPtr);
+			if (vcfginternal_parseobject_keyvalue(parserObj, &internalDataPtr, keyValuePair)) {
+				vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 				if (*internalDataPtr == ',') {
 					++internalDataPtr;
 					continue;
@@ -538,7 +319,7 @@ extern "C" {
 		*dataPtr = internalDataPtr;
 		return skippedCount;
 	}
-	inline size_t vcfginternal_parsevalue(const char** dataPtr, TVCFGKey *keyValuePair) {
+	inline size_t vcfginternal_parsevalue(VCFG_Parser* parserObj, const char** dataPtr, VCFGKey_t *keyValuePair) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -549,7 +330,7 @@ extern "C" {
 
 		size_t valueLength = 0;
 		const char* valueStart = internalDataPtr;
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr)) {
 			if (valueInQuotes && (*internalDataPtr == '"')) {
 				++internalDataPtr;
@@ -581,7 +362,7 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t vcfginternal_parsearray_keyvalue(const char** dataPtr, size_t valueIndex, TVCFGKey* keyValuePair) {
+	inline size_t vcfginternal_parsearray_keyvalue(VCFG_Parser* parserObj, const char** dataPtr, size_t valueIndex, VCFGKey_t* keyValuePair) {
 		if (!dataPtr || !keyValuePair) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -590,14 +371,14 @@ extern "C" {
 		char* keyName = vcfginternal_unsignednumtostr(valueIndex);
 		if (!keyName) return 0;
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
 		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
 
 		// Add the key to the parent key
 		keyValuePair->childCount++;
-		TVCFGKey* newChildren = (TVCFGKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TVCFGKey));
+		VCFGKey_t* newChildren = (VCFGKey_t*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(VCFGKey_t));
 		if (!newChildren) {
 			keyValuePair->childCount--;
 			*dataPtr = internalDataPtr;
@@ -610,17 +391,17 @@ extern "C" {
 
 		keyValuePair->children = newChildren;
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			vcfginternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parseobject(parserObj, &internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			vcfginternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsearray(parserObj, &internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else {
-			vcfginternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsevalue(parserObj, &internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 
 		skippedCount = internalDataPtr - *dataPtr;
@@ -628,7 +409,7 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t vcfginternal_parseobject_keyvalue(const char** dataPtr, TVCFGKey* keyValuePair) {
+	inline size_t vcfginternal_parseobject_keyvalue(VCFG_Parser* parserObj, const char** dataPtr, VCFGKey_t* keyValuePair) {
 		if (!dataPtr || !keyValuePair) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -639,7 +420,7 @@ extern "C" {
 
 		size_t keyLength = 0;
 		const char* keyStart = internalDataPtr;
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr)) {
 			if (keyInQuotes && (*internalDataPtr == '"')) {
 				++internalDataPtr;
@@ -651,7 +432,7 @@ extern "C" {
 			++keyLength;
 		}
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
 		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
@@ -666,7 +447,7 @@ extern "C" {
 		}
 		// Add the key to the parent key
 		keyValuePair->childCount++;
-		TVCFGKey* newChildren = (TVCFGKey*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(TVCFGKey));
+		VCFGKey_t* newChildren = (VCFGKey_t*)realloc((void*)(keyValuePair->children), keyValuePair->childCount * sizeof(VCFGKey_t));
 		if (!newChildren) {
 			keyValuePair->childCount--;
 			*dataPtr = internalDataPtr;
@@ -689,17 +470,17 @@ extern "C" {
 		// Skip the equal sign
 		++internalDataPtr;
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			vcfginternal_parseobject(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parseobject(parserObj, &internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			vcfginternal_parsearray(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsearray(parserObj, &internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 		else {
-			vcfginternal_parsevalue(&internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
+			vcfginternal_parsevalue(parserObj, &internalDataPtr, &(newChildren[keyValuePair->childCount - 1]));
 		}
 
 		skippedCount = internalDataPtr - *dataPtr;
@@ -707,7 +488,7 @@ extern "C" {
 		return skippedCount;
 	}
 
-	inline size_t vcfginternal_parsekeyvalue(const char** dataPtr) {
+	inline size_t vcfginternal_parsekeyvalue(VCFG_Parser* parserObj, const char** dataPtr) {
 		if (!dataPtr) return 0;
 
 		const char* internalDataPtr = *dataPtr;
@@ -719,7 +500,7 @@ extern "C" {
 
 		size_t keyLength = 0;
 		const char* keyStart = internalDataPtr;
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 		while ((internalDataPtr < dataEndPtr)) {
 			if (keyInQuotes && (*internalDataPtr == '"')) { 
 				++internalDataPtr;
@@ -731,7 +512,7 @@ extern "C" {
 			++keyLength;
 		}
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
 		// Don't allow empty keys
 		size_t skippedCount = internalDataPtr - *dataPtr;
@@ -745,41 +526,41 @@ extern "C" {
 			return skippedCount;
 		}
 		// Add the key to the current section
-		m_parsedData[m_sectionCount - 1].keyCount++;
-		TVCFGKey* newKeys = (TVCFGKey*)realloc((void*)(m_parsedData[m_sectionCount - 1].keys), m_parsedData[m_sectionCount - 1].keyCount * sizeof(TVCFGKey));
+		parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount++;
+		VCFGKey_t* newKeys = (VCFGKey_t*)realloc((void*)(parserObj->m_parsedData[parserObj->m_sectionCount - 1].keys), parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount * sizeof(VCFGKey_t));
 		if (!newKeys) {
-			m_parsedData[m_sectionCount - 1].keyCount--;
+			parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount--;
 			*dataPtr = internalDataPtr;
 			return skippedCount;
 		}
-		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].childCount = 0;
-		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].children = 0;
-		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].value = 0;
-		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name = (char*)malloc(keyLength + 1);
-		if (!(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name)) {
-			m_parsedData[m_sectionCount - 1].keyCount--;
+		newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].childCount = 0;
+		newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].children = 0;
+		newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].value = 0;
+		newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].name = (char*)malloc(keyLength + 1);
+		if (!(newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].name)) {
+			parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount--;
 			*dataPtr = internalDataPtr;
 			return skippedCount;
 		}
-		vcfginternal_memcpy((void*)(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name), (void*)keyStart, keyLength);
-		newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1].name[keyLength] = '\0';
+		vcfginternal_memcpy((void*)(newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].name), (void*)keyStart, keyLength);
+		newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1].name[keyLength] = '\0';
 
-		m_parsedData[m_sectionCount - 1].keys = newKeys;
+		parserObj->m_parsedData[parserObj->m_sectionCount - 1].keys = newKeys;
 
 		// Skip the equal sign
 		++internalDataPtr;
 
-		vcfginternal_skipwhitespace(&internalDataPtr);
+		vcfginternal_skipwhitespace(parserObj, &internalDataPtr);
 
 		// Check if the value is an array or object
 		if (*internalDataPtr == '{') {
-			vcfginternal_parseobject(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+			vcfginternal_parseobject(parserObj, &internalDataPtr, &(newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1]));
 		}
 		else if (*internalDataPtr == '[') {
-			vcfginternal_parsearray(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+			vcfginternal_parsearray(parserObj, &internalDataPtr, &(newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1]));
 		}
 		else {
-			vcfginternal_parsevalue(&internalDataPtr, &(newKeys[m_parsedData[m_sectionCount - 1].keyCount - 1]));
+			vcfginternal_parsevalue(parserObj, &internalDataPtr, &(newKeys[parserObj->m_parsedData[parserObj->m_sectionCount - 1].keyCount - 1]));
 		}
 
 		skippedCount = internalDataPtr - *dataPtr;
@@ -796,34 +577,34 @@ extern "C" {
 	 * 
 	 *	@returns 0 - Failure, 1 - Success
 	 */
-	inline int vcfg_parse() {
-		if (!m_configBuffer || !m_configBufferLength) return 0;
+	inline int vcfg_parse(VCFG_Parser* parserObj) {
+		if (!(parserObj->m_configBuffer) || !(parserObj->m_configBufferLength)) return 0;
 
 		// We need to store the end of the buffer to avoid overflowing
-		const char* dataEndPtr = m_configBuffer + m_configBufferLength;
+		const char* dataEndPtr = parserObj->m_configBuffer + parserObj->m_configBufferLength;
 
 		// We work on a temporary variable to ensure the original pointer is in tact
-		const char* internalDataPtr = m_configBuffer;
+		const char* internalDataPtr = parserObj->m_configBuffer;
 
 		// Allocate buffer for the root section
-		m_parsedData = (TVCFGSection*)calloc(1, sizeof(TVCFGSection));
-		if (!m_parsedData) return 0;
-		m_sectionCount = 1;
+		parserObj->m_parsedData = (VCFGSection_t*)calloc(1, sizeof(VCFGSection_t));
+		if (!(parserObj->m_parsedData)) return 0;
+		parserObj->m_sectionCount = 1;
 
 		// TODO:
 		//	- Maybe a better error handling?
 		//	- Test for edge cases
 		while (internalDataPtr < dataEndPtr) {
 			// Skip all whitespaces and comments
-			if (vcfginternal_skipwhitespace(&internalDataPtr)) continue;
-			if (vcfginternal_skipcomments(&internalDataPtr)) continue;
+			if (vcfginternal_skipwhitespace(parserObj, &internalDataPtr)) continue;
+			if (vcfginternal_skipcomments(parserObj, &internalDataPtr)) continue;
 
 			// If there is a section -> [sectionname] -> create a new section
 			// in the parsed data structure and push it to the end
-			if (vcfginternal_createsection(&internalDataPtr)) continue;
+			if (vcfginternal_createsection(parserObj, &internalDataPtr)) continue;
 
 			// The only thing left to do is to parse the key-value pairs
-			if (vcfginternal_parsekeyvalue(&internalDataPtr)) continue;
+			if (vcfginternal_parsekeyvalue(parserObj, &internalDataPtr)) continue;
 			
 			// If everything returned with 0 (no data was parsed) just break
 			break;
@@ -837,58 +618,56 @@ extern "C" {
 	#if !defined(VCFG_BUFFER_ONLY)
 	#include <stdio.h>
 
-	static FILE* m_currentConfigFile = 0;
-
 	/**
 	 *	@brief Open configuration file.
 	 * 
-	 *	Opens/Creates the configuration file and reads the content to the internal buffer
+	 *	Opens the configuration file and reads the content to the internal buffer
 	 * 
 	 *	@param s_path - path to the configuration file
 	 * 
 	 *	@returns 0 - Failure, 1 - Success
 	 */
-	inline int vcfg_open(const char *s_path) {
+	inline int vcfg_open(VCFG_Parser* parserObj, const char *s_path) {
 		// If a file was already opened close the previous one to avoid memory leaks
-		if (m_currentConfigFile) {
-			fclose(m_currentConfigFile);
-			m_currentConfigFile = 0;
+		if (parserObj->m_currentConfigFile) {
+			fclose(parserObj->m_currentConfigFile);
+			parserObj->m_currentConfigFile = 0;
 		}
-		
+
 		// Open the desired file
-		errno_t fileOpenFailed = fopen_s(&m_currentConfigFile, s_path, "rb");
-		if (fileOpenFailed || !m_currentConfigFile) {
+		errno_t fileOpenFailed = fopen_s(&(parserObj->m_currentConfigFile), s_path, "rb");
+		if (fileOpenFailed || !(parserObj->m_currentConfigFile)) {
 			perror("FOPEN()");
 			return 0; // Failure
 		}
 
 		// Create a buffer for the file to read to
-		fseek(m_currentConfigFile, 0, SEEK_END);
-		size_t fileSize = ftell(m_currentConfigFile);
-		fseek(m_currentConfigFile, 0, SEEK_SET);
+		fseek(parserObj->m_currentConfigFile, 0, SEEK_END);
+		size_t fileSize = ftell(parserObj->m_currentConfigFile);
+		fseek(parserObj->m_currentConfigFile, 0, SEEK_SET);
 
 		// Clear the previously used buffer
-		if (m_configBuffer) {
-			free((void*)m_configBuffer);
-			m_configBuffer = 0;
+		if (parserObj->m_configBuffer) {
+			free((void*)(parserObj->m_configBuffer));
+			parserObj->m_configBuffer = 0;
 		}
 
 		// Allocate memory
-		m_configBuffer = (char*)malloc((fileSize + 1) * sizeof(char));
-		if (!m_configBuffer) {
+		parserObj->m_configBuffer = (char*)malloc((fileSize + 1) * sizeof(char));
+		if (!(parserObj->m_configBuffer)) {
 			perror("MALLOC()");
 			return 0;
 		}
 
 		// Read the file contents into the buffer
-		if (fread((void*)m_configBuffer, sizeof(char), fileSize, m_currentConfigFile) != fileSize) {
+		if (fread((void*)(parserObj->m_configBuffer), sizeof(char), fileSize, parserObj->m_currentConfigFile) != fileSize) {
 			perror("FREAD()");
 			return 0;
 		};
 
-		m_configBufferLength = fileSize;
+		parserObj->m_configBufferLength = fileSize;
 		
-		return vcfg_parse();
+		return vcfg_parse(parserObj);
 	}
 	#endif // VCFG_BUFFER_ONLY
 
@@ -898,7 +677,7 @@ extern "C" {
 	 *	Clears the entire key by freeing the allocated memory and recursively calling
 	 *	itself for all the nested child keys
 	 */
-	inline void vcfginternal_clear_key(TVCFGKey key) {
+	inline void vcfginternal_clear_key(VCFGKey_t key) {
 		free((void*)(key.name));
 		key.name = 0;
 
@@ -923,7 +702,7 @@ extern "C" {
 	 * 
 	 *	Clears the entire section by clearing all the keys and freeing the allocated memory
 	 */
-	inline void vcfginternal_clear_section(TVCFGSection section) {
+	inline void vcfginternal_clear_section(VCFGSection_t section) {
 		if (section.name) {
 			free((void*)(section.name));
 			section.name = 0;
@@ -945,27 +724,27 @@ extern "C" {
 	 *	Frees all the allocated buffers and closes the configuration files.
 	 *	It has to be run after we end working with the library to avoid memory leaks
 	 */
-	inline void vcfg_clear() {
-		if (m_configBuffer) {
-			free((void*)m_configBuffer);
-			m_configBuffer = 0;
+	inline void vcfg_clear(VCFG_Parser* parserObj) {
+		if (parserObj->m_configBuffer) {
+			free((void*)(parserObj->m_configBuffer));
+			parserObj->m_configBuffer = 0;
 		}
 
-		if (m_sectionCount) {
-			for (uint32_t i = 0; i < m_sectionCount; i++) {
-				vcfginternal_clear_section(m_parsedData[i]);
+		if (parserObj->m_sectionCount) {
+			for (uint32_t i = 0; i < parserObj->m_sectionCount; i++) {
+				vcfginternal_clear_section(parserObj->m_parsedData[i]);
 			}
 
-			free((void*)(m_parsedData));
-			m_parsedData = 0;
+			free((void*)(parserObj->m_parsedData));
+			parserObj->m_parsedData = 0;
 
-			m_sectionCount = 0;
+			parserObj->m_sectionCount = 0;
 		}
 
 		#if !defined(VCFG_BUFFER_ONLY)
-			if (m_currentConfigFile) {
-				fclose(m_currentConfigFile);
-				m_currentConfigFile = 0;
+			if (parserObj->m_currentConfigFile) {
+				fclose(parserObj->m_currentConfigFile);
+				parserObj->m_currentConfigFile = 0;
 			}
 		#endif // VCFG_BUFFER_ONLY
 	}
@@ -983,12 +762,12 @@ extern "C" {
 	 *
 	 *	@param sectionName - name of the section (NULL for the root section)
 	 *
-	 *	@returns (TVCFGSection*) section pointer
+	 *	@returns (VCFGSection_t*) section pointer
 	 */
-	inline TVCFGSection* vcfg_get_section(const char* sectionName) {
-		for (uint32_t i = 0; i < m_sectionCount; i++) {
-			if (vcfginternal_strcmp(sectionName, m_parsedData[i].name) == 0) {
-				return &(m_parsedData[i]);
+	inline VCFGSection_t* vcfg_get_section(VCFG_Parser* parserObj, const char* sectionName) {
+		for (uint32_t i = 0; i < parserObj->m_sectionCount; i++) {
+			if (vcfginternal_strcmp(sectionName, parserObj->m_parsedData[i].name) == 0) {
+				return &(parserObj->m_parsedData[i]);
 			}
 		}
 		return 0;
@@ -1004,8 +783,8 @@ extern "C" {
 	 * 
 	 *	@returns (const char*) value of the given key
 	 */
-	inline const char* vcfg_get_string(const char* sectionName, const char* keyName) {
-		TVCFGSection* section = vcfg_get_section(sectionName);
+	inline const char* vcfg_get_string(VCFG_Parser* parserObj, const char* sectionName, const char* keyName) {
+		VCFGSection_t* section = vcfg_get_section(parserObj, sectionName);
 
 		for (uint32_t i = 0; i < section->keyCount; i++) {
 			if (vcfginternal_strcmp(section->keys[i].name, keyName) == 0) {
@@ -1025,8 +804,8 @@ extern "C" {
 	 *
 	 *	@returns (int64_t) value of the given key
 	 */
-	inline int64_t vcfg_get_int(const char* sectionName, const char* keyName) {
-		const char* stringValue = vcfg_get_string(sectionName, keyName);
+	inline int64_t vcfg_get_int(VCFG_Parser* parserObj, const char* sectionName, const char* keyName) {
+		const char* stringValue = vcfg_get_string(parserObj, sectionName, keyName);
 		return vcfginternal_strtoint(stringValue);
 	}
 
@@ -1040,8 +819,8 @@ extern "C" {
 	 *
 	 *	@returns (double) value of the given key
 	 */
-	inline double vcfg_get_float(const char* sectionName, const char* keyName) {
-		const char* stringValue = vcfg_get_string(sectionName, keyName);
+	inline double vcfg_get_float(VCFG_Parser* parserObj, const char* sectionName, const char* keyName) {
+		const char* stringValue = vcfg_get_string(parserObj, sectionName, keyName);
 		return vcfginternal_strtofloat(stringValue);
 	}
 
@@ -1055,8 +834,8 @@ extern "C" {
 	 *
 	 *	@returns (int [1-true; 0-false]) value of the given key
 	 */
-	inline int vcfg_get_bool(const char* sectionName, const char* keyName) {
-		const char* stringValue = vcfg_get_string(sectionName, keyName);
+	inline int vcfg_get_bool(VCFG_Parser* parserObj, const char* sectionName, const char* keyName) {
+		const char* stringValue = vcfg_get_string(parserObj, sectionName, keyName);
 		return (vcfginternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
 	}
 
@@ -1070,8 +849,8 @@ extern "C" {
 	 *
 	 *	@returns (const VCFG_Node*) entire node of the given key
 	 */
-	inline const VCFG_Node* vcfg_get_node(const char* sectionName, const char* keyName) {
-		TVCFGSection* section = vcfg_get_section(sectionName);
+	inline const VCFG_Node* vcfg_get_node(VCFG_Parser* parserObj, const char* sectionName, const char* keyName) {
+		VCFGSection_t* section = vcfg_get_section(parserObj, sectionName);
 
 		for (uint32_t i = 0; i < section->keyCount; i++) {
 			if (vcfginternal_strcmp(section->keys[i].name, keyName) == 0) {
@@ -1091,9 +870,9 @@ extern "C" {
 	 *
 	 *	@returns (const VCFG_Node*) entire node of the given key
 	 */
-	inline const VCFG_Node* vcfg_get_node_from_node(const VCFG_Node* parentNode, const char* keyName) {
+	inline const VCFG_Node* vcfg_get_node_from_node(VCFG_Parser* parserObj, const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return vcfg_get_node(0, keyName);
+		if (!parentNode) return vcfg_get_node(parserObj, 0, keyName);
 
 		for (uint32_t i = 0; i < parentNode->childCount; i++) {
 			if (vcfginternal_strcmp(parentNode->children[i].name, keyName) == 0) {
@@ -1113,9 +892,9 @@ extern "C" {
 	 *
 	 *	@returns (const char*) value of the given key
 	 */
-	inline const char* vcfg_get_string_from_node(const VCFG_Node* parentNode, const char* keyName) {
+	inline const char* vcfg_get_string_from_node(VCFG_Parser* parserObj, const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return vcfg_get_string(0, keyName);
+		if (!parentNode) return vcfg_get_string(parserObj, 0, keyName);
 
 		for (uint32_t i = 0; i < parentNode->childCount; i++) {
 			if (vcfginternal_strcmp(parentNode->children[i].name, keyName) == 0) {
@@ -1135,11 +914,11 @@ extern "C" {
 	 *
 	 *	@returns (int64_t) value of the given key
 	 */
-	inline int64_t vcfg_get_int_from_node(const VCFG_Node* parentNode, const char* keyName) {
+	inline int64_t vcfg_get_int_from_node(VCFG_Parser* parserObj, const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return vcfg_get_int(0, keyName);
+		if (!parentNode) return vcfg_get_int(parserObj, 0, keyName);
 		
-		const char* stringValue = vcfg_get_string_from_node(parentNode, keyName);
+		const char* stringValue = vcfg_get_string_from_node(parserObj, parentNode, keyName);
 		return vcfginternal_strtoint(stringValue);
 	}
 
@@ -1153,11 +932,11 @@ extern "C" {
 	 *
 	 *	@returns (double) value of the given key
 	 */
-	inline double vcfg_get_float_from_node(const VCFG_Node* parentNode, const char* keyName) {
+	inline double vcfg_get_float_from_node(VCFG_Parser* parserObj, const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return vcfg_get_float(0, keyName);
+		if (!parentNode) return vcfg_get_float(parserObj, 0, keyName);
 
-		const char* stringValue = vcfg_get_string_from_node(parentNode, keyName);
+		const char* stringValue = vcfg_get_string_from_node(parserObj, parentNode, keyName);
 		return vcfginternal_strtofloat(stringValue);
 	}
 
@@ -1171,11 +950,11 @@ extern "C" {
 	 *
 	 *	@returns (int [1-true; 0-false]) value of the given key
 	 */
-	inline int vcfg_get_bool_from_node(const VCFG_Node* parentNode, const char* keyName) {
+	inline int vcfg_get_bool_from_node(VCFG_Parser* parserObj, const VCFG_Node* parentNode, const char* keyName) {
 		// If there's no parent use the root section as parent
-		if (!parentNode) return vcfg_get_bool(0, keyName);
+		if (!parentNode) return vcfg_get_bool(parserObj, 0, keyName);
 
-		const char* stringValue = vcfg_get_string_from_node(parentNode, keyName);
+		const char* stringValue = vcfg_get_string_from_node(parserObj, parentNode, keyName);
 		return (vcfginternal_strcmp(stringValue, "true") == 0 ? 1 : 0);
 	}
 
@@ -1183,9 +962,4 @@ extern "C" {
 }
 #endif // __cplusplus
 
-// C++ wrapper
-#ifdef __cplusplus
-	
-#endif // __cplusplus
-
-#endif // VORTEX_CONFIG_LIB
+#endif // VORTEX_CONFIG_H
