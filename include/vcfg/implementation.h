@@ -635,8 +635,8 @@ extern "C" {
 		}
 
 		// Open the desired file
-		errno_t fileOpenFailed = fopen_s(&(parserObj->m_currentConfigFile), s_path, "rb");
-		if (fileOpenFailed || !(parserObj->m_currentConfigFile)) {
+		parserObj->m_currentConfigFile = fopen(s_path, "rb");
+		if (!(parserObj->m_currentConfigFile)) {
 			perror("FOPEN()");
 			return 0; // Failure
 		}
