@@ -44,3 +44,19 @@ All notable changes to this project will be documented in this file.
 - The way configuration files are opened (from a+b mode to rb mode [basically from read and write to read only mode])
 
 ### Fixed
+
+
+## [0.3] - 2024-06-26
+
+### Added
+
+- Full C++ support (C++ wrappers)
+- C++ polymorphic functions. ```GetString()``` and other functions work with both node pointer and string arguments
+ 
+### Changed
+
+- Function prefixes changed from ```cfv_``` to ```vcfg_``` + minor changes in structure names
+- Calling convention in C has changed. Instead of using ```vcfg_parse();``` we have to create the parser object and call ```vcfg_parse(objectPointer);```. This applies to all the library calls
+- Library structure. Instead of one huge header file the source now consists of smaller header files that make it easier to navigate between the lines of code
+
+### Fixed

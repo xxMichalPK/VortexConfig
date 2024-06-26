@@ -8,7 +8,7 @@ int main() {
 	VCFG_Parser parserObject;
 
 	if (!parserObject.Open("Sample.vcfg")) {
-		printf("Failed to open the specified file!\n\r");
+		std::cerr << "Failed to open the specified file!\n\r";
 		return 1;
 	}
 
